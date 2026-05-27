@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pymos"
+version = "0.1.0"
+description = "Pure-Python Manchester OWL syntax parser to the owlready2 model, with a class-relation SPARQL CONSTRUCT converter."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "Michel Dumontier", email = "michel.dumontier@maastrichtuniversity.nl" }]
+dependencies = ["parsimonious>=0.10", "owlready2>=0.46"]
+
+[project.optional-dependencies]
+pyoxigraph = ["pyoxigraph>=0.4"]
+rdflib = ["rdflib>=7.0"]
+endpoint = ["SPARQLWrapper>=2.0"]
+dev = ["pytest>=8.0", "pyoxigraph>=0.4", "rdflib>=7.0", "ruff>=0.6"]
+
+[tool.setuptools.packages.find]
+include = ["pymos*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+extend-exclude = ["pymos/grammar.py"]

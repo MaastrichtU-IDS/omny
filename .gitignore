@@ -4,3 +4,4 @@ _ref_owlapy/
 __pycache__/
 *.pyc
 .venv/
+*.egg-info/
