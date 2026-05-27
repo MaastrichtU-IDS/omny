@@ -517,7 +517,9 @@ from pymos.store import run_owlready2
 
 def select_iris(target_local, relations):
     q = class_relations_query(f"<{NS}{target_local}>", relations=relations, construct=False)
-    return sorted(str(r[0]) for r in run_owlready2(q, onto.world))
+    # owlready2 SELECT rows are entity objects; .iri gives the full IRI
+    # (str() would give the short form like `biomed.Disease`).
+    return sorted(r[0].iri for r in run_owlready2(q, onto.world))
 
 print("Disease sub        :", select_iris("Disease", ("sub",)))
 print("Disease direct_sub :", select_iris("Disease", ("direct_sub",)))
@@ -542,8 +544,8 @@ from pymos.store import run_rdflib, run_pyoxigraph
 
 q = class_relations_query(f"<{NS}Disease>", relations=("sub",), construct=False)
 
-# owlready2
-owl_rows = {str(r[0]) for r in run_owlready2(q, onto.world)}
+# owlready2 (.iri normalises entity objects to full IRIs)
+owl_rows = {r[0].iri for r in run_owlready2(q, onto.world)}
 
 # rdflib (via the owlready2 world's rdflib view)
 rdflib_graph = onto.world.as_rdflib_graph()
