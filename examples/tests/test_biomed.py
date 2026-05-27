@@ -1,5 +1,7 @@
 from pathlib import Path
 
+import owlready2
+
 import pymos
 from pymos import class_relations_query
 from pymos.store import run_owlready2
@@ -56,3 +58,23 @@ def test_antibiotic_equivalent_restriction():
     onto = _load()
     antibiotic = onto.world[NS + "Antibiotic"]
     assert len(antibiotic.equivalent_to) >= 1
+
+    # The equivalent class is `Drug and (treats some BacterialInfection)`,
+    # represented by owlready2 as an And over a named class and a restriction.
+    equiv = antibiotic.equivalent_to[0]
+    assert isinstance(equiv, owlready2.And)
+
+    operands = list(equiv.Classes)
+    # (b) Drug is one of the conjuncts.
+    assert any(
+        isinstance(op, owlready2.ThingClass) and op.iri == NS + "Drug"
+        for op in operands
+    )
+    # (c) one conjunct is `treats some BacterialInfection`.
+    assert any(
+        isinstance(op, owlready2.Restriction)
+        and op.property.iri == NS + "treats"
+        and op.type == owlready2.SOME
+        and op.value.iri == NS + "BacterialInfection"
+        for op in operands
+    )
