@@ -1,0 +1,4 @@
+pymos includes a Manchester OWL Syntax PEG grammar and test fixtures derived
+from owlapy (https://github.com/dice-group/owlapy), licensed under the MIT License,
+Copyright (c) 2024 Caglar Demir. The original MIT license text is reproduced in
+licenses/owlapy-LICENSE.txt.
