@@ -1,3 +1,4 @@
+import rdflib
 import owlready2
 import pytest
 from pymos import parse
@@ -58,3 +59,21 @@ def test_class_axioms():
     ice = onto.world["http://ex.org/IceCream"]
     assert any(m in d.entities and ice in d.entities
                for d in onto.disjoint_classes())
+
+
+def test_individual_frame():
+    doc = """
+    Prefix: : <http://ex.org/>
+    Individual: bob
+        Types: Person
+        Facts: hasAge 42
+        SameAs: robert
+        DifferentFrom: alice
+    """
+    onto = parse(doc)
+    bob = onto.world["http://ex.org/bob"]
+    assert onto.world["http://ex.org/Person"] in bob.is_a
+    g = onto.world.as_rdflib_graph()
+    same = rdflib.URIRef("http://www.w3.org/2002/07/owl#sameAs")
+    assert (rdflib.URIRef("http://ex.org/bob"), same,
+            rdflib.URIRef("http://ex.org/robert")) in g

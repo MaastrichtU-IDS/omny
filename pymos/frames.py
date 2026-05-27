@@ -236,8 +236,52 @@ class FrameLoader:
         self._apply_annotations(p, sections.get("Annotations", []))
 
     def _handle_individual(self, subject: str, sections: dict) -> None:
-        """Task 12: create the individual; axioms added later."""
-        self.r.get_individual(subject)
+        ind = self.r.get_individual(subject)
+        for t in sections.get("Types", []):
+            ind.is_a.append(self._parse_ce(t))
+        for fact in sections.get("Facts", []):
+            self._assert_fact(ind, fact)
+        for same in sections.get("SameAs", []):
+            self._assert_same_as(ind, self.r.get_individual(same))
+        diff = [self.r.get_individual(x) for x in sections.get("DifferentFrom", [])]
+        if diff:
+            with self.r.onto:
+                owlready2.AllDifferent([ind, *diff])
+        self._apply_annotations(ind, sections.get("Annotations", []))
+
+    def _assert_fact(self, ind, fact: str) -> None:
+        """Assert a property fact on an individual. fact like 'hasAge 42' or 'hasFriend alice'."""
+        prop_name, _, raw = fact.strip().partition(" ")
+        raw = raw.strip()
+        value = self._literal_or_individual(raw)
+        if isinstance(value, owlready2.Thing):
+            prop = self.r.get_object_property(prop_name)
+        else:
+            prop = self.r.get_data_property(prop_name)
+        name = self._py_name(prop)
+        setattr(ind, name, getattr(ind, name, []) + [value])
+
+    def _literal_or_individual(self, raw: str):
+        """Parse a fact value: quoted string, boolean, int, float, or individual name."""
+        if raw.startswith('"') and raw.endswith('"'):
+            return raw[1:-1]
+        if raw.lower() in ("true", "false"):
+            return raw.lower() == "true"
+        try:
+            return int(raw)
+        except ValueError:
+            pass
+        try:
+            return float(raw)
+        except ValueError:
+            pass
+        return self.r.get_individual(raw)
+
+    def _assert_same_as(self, a, b) -> None:
+        """Assert owl:sameAs(a, b) via a low-level triple insert."""
+        SAMEAS = "http://www.w3.org/2002/07/owl#sameAs"
+        sameas_storid = self.r.world._abbreviate(SAMEAS)
+        self.r.onto._add_obj_triple_raw_spo(a.storid, sameas_storid, b.storid)
 
     def _handle_annotation_property(self, subject: str, sections: dict) -> None:
         """Task 13: create the annotation property."""
