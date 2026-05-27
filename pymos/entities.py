@@ -29,6 +29,7 @@ class EntityResolver:
             prefix, _, local = name.partition(":")
             if prefix in self.prefixes:
                 return self.prefixes[prefix] + local
+            raise ValueError(f"Unknown prefix {prefix!r} in {name!r}")
         return self.base + name
 
     def _split(self, iri: str):

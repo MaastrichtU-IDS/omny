@@ -1,3 +1,4 @@
+import pytest
 import owlready2
 from pymos.entities import EntityResolver
 
@@ -29,3 +30,9 @@ def test_object_vs_data_property(onto):
     dp = r.get_data_property("hasCalories")
     assert owlready2.ObjectProperty in op.is_a or owlready2.ObjectPropertyClass in type(op).__mro__
     assert owlready2.DataProperty in dp.is_a or owlready2.DataPropertyClass in type(dp).__mro__
+
+
+def test_unknown_prefix_raises(onto):
+    r = EntityResolver(onto, prefixes={})
+    with pytest.raises(ValueError):
+        r.get_class("bogus:Thing")

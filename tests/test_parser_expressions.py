@@ -39,6 +39,12 @@ def test_nested_precedence(onto):
     assert isinstance(ce, owlready2.And)
 
 
+def test_precedence_and_binds_tighter_than_or(onto):
+    ce = parse_expression("A and B or C", onto)
+    assert isinstance(ce, owlready2.Or)
+    assert any(isinstance(op, owlready2.And) for op in ce.Classes)
+
+
 def test_some(onto):
     ce = parse_expression("hasTopping some Cheese", onto)
     assert ce.type == owlready2.SOME
@@ -108,3 +114,21 @@ def test_data_has_value(onto):
     ce = parse_expression('hasName value "Bob"', onto)
     assert ce.type == owlready2.VALUE
     assert ce.value == "Bob"
+
+
+def test_inverse_has_self(onto):
+    ce = parse_expression("inverse hasTopping Self", onto)
+    assert ce.type == owlready2.HAS_SELF
+    assert isinstance(ce.property, owlready2.Inverse)
+
+
+def test_typed_integer_literal(onto):
+    ce = parse_expression('hasAge value "5"^^xsd:integer', onto,
+                          prefixes={"xsd": "http://www.w3.org/2001/XMLSchema#"})
+    assert ce.value == 5 and isinstance(ce.value, int)
+
+
+def test_typed_boolean_literal(onto):
+    ce = parse_expression('isHot value "true"^^xsd:boolean', onto,
+                          prefixes={"xsd": "http://www.w3.org/2001/XMLSchema#"})
+    assert ce.value is True

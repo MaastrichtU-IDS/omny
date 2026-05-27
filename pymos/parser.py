@@ -96,7 +96,10 @@ class ManchesterParser(NodeVisitor):
 
     def visit_has_self(self, node, children):
         property_, *_ = children
-        return property_.has_self()
+        if hasattr(property_, "has_self"):
+            return property_.has_self()
+        from owlready2.class_construct import Restriction
+        return Restriction(property_, owlready2.HAS_SELF, None, True, None)
 
     def visit_object_property(self, node, children):
         inverse, property_ = children
@@ -190,7 +193,10 @@ class ManchesterParser(NodeVisitor):
 
     def visit_typed_literal(self, node, children):
         value, _, datatype = children
-        # value is already stripped by visit_quoted_string
+        if datatype is bool:
+            return value.strip().lower() == "true"
+        if datatype in (int, float):
+            return datatype(value)
         return value
 
     def visit_float_literal(self, node, children):
