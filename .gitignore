@@ -1,0 +1,6 @@
+_ref_horned-owl/
+_ref_horned-manchester/
+_ref_owlapy/
+__pycache__/
+*.pyc
+.venv/
