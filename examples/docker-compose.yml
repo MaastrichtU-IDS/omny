@@ -1,0 +1,19 @@
+services:
+  notebook:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    working_dir: /workspace
+    volumes:
+      # Mount the repo root so `pip install -e .` targets the live working copy.
+      - ..:/workspace
+    ports:
+      - "8888:8888"
+    depends_on:
+      - triplestore
+
+  triplestore:
+    image: ghcr.io/oxigraph/oxigraph:latest
+    command: ["serve", "--location", "/data", "--bind", "0.0.0.0:7878"]
+    ports:
+      - "7878:7878"
