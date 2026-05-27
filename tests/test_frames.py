@@ -125,3 +125,27 @@ def test_datatype_declaration_emits_triple():
     assert (rdflib.URIRef("http://ex.org/MyType"),
             rdflib.URIRef("http://www.w3.org/1999/02/22-rdf-syntax-ns#type"),
             rdflib.URIRef("http://www.w3.org/2000/01/rdf-schema#Datatype")) in g
+
+
+def test_ontology_iri_is_set():
+    doc = """
+    Prefix: : <http://ex.org/>
+    Ontology: <http://ex.org/myonto>
+    Class: Pizza
+    """
+    onto = parse(doc)
+    assert onto.base_iri.rstrip("#/") == "http://ex.org/myonto"
+    # simple names still resolve via the empty prefix, not the ontology IRI
+    assert onto.world["http://ex.org/Pizza"] is not None
+
+
+def test_import_recorded_without_fetch():
+    doc = """
+    Prefix: : <http://ex.org/>
+    Ontology: <http://ex.org/myonto>
+    Import: <http://other.org/imported>
+    Class: Pizza
+    """
+    onto = parse(doc)
+    imported_iris = {o.base_iri.rstrip("#/") for o in onto.imported_ontologies}
+    assert "http://other.org/imported" in imported_iris

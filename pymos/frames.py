@@ -9,6 +9,8 @@ from pymos.entities import EntityResolver
 from pymos.parser import ManchesterParser
 
 _PREFIX_RE = re.compile(r"^\s*Prefix:\s*(\w*):\s*<([^>]+)>", re.M)
+_ONTOLOGY_RE = re.compile(r"^\s*Ontology:\s*<([^>]+)>", re.M)
+_IMPORT_RE = re.compile(r"^\s*Import:\s*<([^>]+)>", re.M)
 
 _FRAME_RE = re.compile(
     r"^\s*(Class|ObjectProperty|DataProperty|Individual|Datatype|AnnotationProperty):",
@@ -65,8 +67,10 @@ def parse(text: str, onto: Optional[owlready2.Ontology] = None,
     Notes:
         * ``Prefix:`` declarations in the document are extracted automatically and
           merged with any caller-supplied *prefixes*.
-        * ``Ontology:`` and ``Import:`` preamble lines are silently ignored; the
-          ontology IRI is not inferred from them and imports are not fetched.
+        * When *onto* is ``None``, the ``Ontology: <iri>`` preamble line (if
+          present) is used as the identity IRI of the newly created ontology.
+        * ``Import: <iri>`` lines are recorded as ``owl:imports`` declarations in
+          ``onto.imported_ontologies``; the imported ontologies are **not fetched**.
         * Only the **asserted** graph is populated — no reasoner is invoked.
     """
     # Collect prefixes from the document (needed to resolve entity IRIs).
@@ -75,13 +79,19 @@ def parse(text: str, onto: Optional[owlready2.Ontology] = None,
         doc_prefixes[m.group(1)] = m.group(2)
 
     if onto is None:
-        onto = owlready2.World().get_ontology("http://pymos.test/onto.owl")
+        m = _ONTOLOGY_RE.search(text)
+        iri = m.group(1) if m else "http://pymos.test/onto.owl"
+        onto = owlready2.World().get_ontology(iri)
 
     prefixes = dict(prefixes or {})
     prefixes.update(doc_prefixes)
 
     resolver = EntityResolver(onto, prefixes)
     FrameLoader(resolver, ManchesterParser(resolver)).load(text)
+
+    for m in _IMPORT_RE.finditer(text):
+        onto.imported_ontologies.append(onto.world.get_ontology(m.group(1)))
+
     return onto
 
 

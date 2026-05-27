@@ -195,7 +195,9 @@ print([str(s["rel"]) for s in results])
 - **Frame tokeniser is not string-aware.** A token that looks like `Keyword:` at the
   start of a line *inside a multi-line quoted literal* can cause incorrect frame
   splitting.  Single-line operands and standard Manchester frame forms work correctly.
-  `Import:` directives in the ontology preamble are currently ignored (not fetched).
+  `Import:` directives in the ontology preamble are recorded as `owl:imports`
+  declarations (visible via `onto.imported_ontologies`) but the imported ontologies
+  are **not fetched** — only the declaration is stored.
 
 ---
 
