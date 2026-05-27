@@ -26,6 +26,23 @@ def test_prefix_and_class_frame_subclassof():
     assert any(getattr(sc, "type", None) == owlready2.SOME for sc in pizza.is_a)
 
 
+def test_object_property_frame():
+    doc = """
+    Prefix: : <http://ex.org/>
+    ObjectProperty: hasTopping
+        Domain: Pizza
+        Range: Topping
+        Characteristics: Transitive, Functional
+        InverseOf: isToppingOf
+    """
+    onto = parse(doc)
+    p = onto.world["http://ex.org/hasTopping"]
+    assert onto.world["http://ex.org/Pizza"] in p.domain
+    assert onto.world["http://ex.org/Topping"] in p.range
+    assert owlready2.TransitiveProperty in p.is_a
+    assert owlready2.FunctionalProperty in p.is_a
+
+
 def test_class_axioms():
     doc = """
     Prefix: : <http://ex.org/>

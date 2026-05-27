@@ -199,13 +199,41 @@ class FrameLoader:
         """No-op stub; replaced in Task 13."""
         pass
 
+    _CHARS = {
+        "Functional": owlready2.FunctionalProperty,
+        "InverseFunctional": owlready2.InverseFunctionalProperty,
+        "Transitive": owlready2.TransitiveProperty,
+        "Symmetric": owlready2.SymmetricProperty,
+        "Asymmetric": owlready2.AsymmetricProperty,
+        "Reflexive": owlready2.ReflexiveProperty,
+        "Irreflexive": owlready2.IrreflexiveProperty,
+    }
+
     def _handle_object_property(self, subject: str, sections: dict) -> None:
-        """Task 11: create the object property; axioms added later."""
-        self.r.get_object_property(subject)
+        p = self.r.get_object_property(subject)
+        for d in sections.get("Domain", []):
+            p.domain.append(self._parse_ce(d))
+        for rng in sections.get("Range", []):
+            p.range.append(self._parse_ce(rng))
+        for ch in sections.get("Characteristics", []):
+            p.is_a.append(self._CHARS[ch.strip()])
+        for inv in sections.get("InverseOf", []):
+            p.inverse_property = self.r.get_object_property(inv)
+        for sup in sections.get("SubPropertyOf", []):
+            p.is_a.append(self.r.get_object_property(sup))
+        self._apply_annotations(p, sections.get("Annotations", []))
 
     def _handle_data_property(self, subject: str, sections: dict) -> None:
-        """Task 11: create the data property; axioms added later."""
-        self.r.get_data_property(subject)
+        p = self.r.get_data_property(subject)
+        for d in sections.get("Domain", []):
+            p.domain.append(self._parse_ce(d))
+        for rng in sections.get("Range", []):
+            p.range.append(self._parse_ce(rng))
+        for ch in sections.get("Characteristics", []):
+            p.is_a.append(self._CHARS[ch.strip()])
+        for sup in sections.get("SubPropertyOf", []):
+            p.is_a.append(self.r.get_data_property(sup))
+        self._apply_annotations(p, sections.get("Annotations", []))
 
     def _handle_individual(self, subject: str, sections: dict) -> None:
         """Task 12: create the individual; axioms added later."""
