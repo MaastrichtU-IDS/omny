@@ -90,3 +90,21 @@ def test_one_of(onto):
     ce = parse_expression("{ a , b , c }", onto)
     assert isinstance(ce, owlready2.OneOf)
     assert {i.name for i in ce.instances} == {"a", "b", "c"}
+
+
+def test_data_some_with_datatype(onto):
+    ce = parse_expression("hasAge some xsd:integer", onto)
+    assert ce.type == owlready2.SOME
+    assert ce.value is int  # owlready2 maps xsd:integer -> python int
+
+
+def test_facet_restriction(onto):
+    ce = parse_expression("hasAge some xsd:integer[>= 18]", onto)
+    assert isinstance(ce.value, owlready2.ConstrainedDatatype)
+    assert ce.value.min_inclusive == 18
+
+
+def test_data_has_value(onto):
+    ce = parse_expression('hasName value "Bob"', onto)
+    assert ce.type == owlready2.VALUE
+    assert ce.value == "Bob"

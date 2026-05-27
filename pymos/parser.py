@@ -169,7 +169,8 @@ class ManchesterParser(NodeVisitor):
 
     def visit_facet_restriction(self, node, children):
         facet_node, _, literal = children
-        facet_text = _node_text(facet_node)
+        # facet is an alternation -> arrives wrapped in a 1-element list
+        facet_text = _node_text(facet_node[0]) if isinstance(facet_node, list) else _node_text(facet_node)
         return (self._FACET[facet_text], literal)
 
     def visit_non_negative_integer(self, node, children):
