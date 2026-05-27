@@ -240,6 +240,15 @@ it and return an RDF graph (rdflib `Graph` for CONSTRUCT; rows for SELECT):
 - `run_rdflib(query, graph)` — rdflib
 - `run_endpoint(query, url)` — remote SPARQL (SPARQLWrapper / httpx)
 
+**Dependency policy.** The core (parser + `class_relations_query`, which returns a
+string) hard-depends only on `parsimonious` + `owlready2`. **Neither rdflib nor
+pyoxigraph is a hard dependency** — they are optional extras, each behind an
+import-guarded runner, and kept mutually independent. In particular the
+owlready2 → pyoxigraph path uses owlready2's **native N-Triples** export
+(`onto.save(format="ntriples")`), *not* `as_rdflib_graph()`, so loading into pyoxigraph
+never pulls in rdflib. owlready2 itself ships its own SQLite quadstore and SPARQL engine
+and does not require rdflib.
+
 ## 7. Testing strategy
 
 - **Parser (expression):** table of Manchester snippets → expected owlready2 structures;
