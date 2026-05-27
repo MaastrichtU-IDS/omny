@@ -31,3 +31,30 @@ def test_equiv_both_directions():
 def test_individual_rdf_type():
     c = _relation_clause("individual", "<http://ex.org/Pizza>", "?ind")
     assert _norm(c) == _norm("?ind rdf:type <http://ex.org/Pizza> .")
+
+
+import rdflib  # noqa: F401
+from pymos.sparql import class_relations_query
+
+
+def test_construct_query_is_valid_sparql():
+    q = class_relations_query("<http://ex.org/Pizza>", relations=("super", "equiv"))
+    assert q.strip().startswith("PREFIX")
+    assert "CONSTRUCT { ?s ?p ?o }" in q
+    assert "rdfs:subClassOf+ ?rel" in q
+    from rdflib.plugins.sparql import prepareQuery
+    prepareQuery(q)
+
+
+def test_select_mode_projects_iris():
+    q = class_relations_query("<http://ex.org/Pizza>", relations=("sub",), construct=False)
+    assert "SELECT DISTINCT ?rel" in q
+    from rdflib.plugins.sparql import prepareQuery
+    prepareQuery(q)
+
+
+def test_named_class_accepts_owlready_class(onto):
+    from pymos import parse_expression
+    pizza = parse_expression("Pizza", onto)
+    q = class_relations_query(pizza, relations=("super",))
+    assert "<http://pymos.test/onto.owl#Pizza>" in q
