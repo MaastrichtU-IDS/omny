@@ -24,9 +24,10 @@ The existing options each fall short:
 1. Parses Manchester OWL syntax (expressions *and* full document frames) into the
    **owlready2** object model.
 2. Converts a class (named, or a parsed expression) into a **store-agnostic
-   `CONSTRUCT` SPARQL query** that retrieves the full RDF subgraph of its
-   `rdfs:subClassOf` / `owl:equivalentClass` neighbours — in both directions —
-   **including the blank-node structure of any anonymous class expressions**.
+   `CONSTRUCT` SPARQL query** that retrieves the full RDF subgraph of its related
+   classes — (transitive) super/subclasses, **direct** super/subclasses, equivalent
+   classes — and its **individuals** (instances), **including the blank-node structure
+   of any anonymous class expressions**.
 
 ### Non-goals (YAGNI)
 
@@ -43,7 +44,7 @@ The existing options each fall short:
 | Parser source | **Vendor** owlapy's MIT `parsimonious` PEG grammar (with attribution), retarget visitor to owlready2 |
 | Output model | **owlready2** class-expression / axiom objects |
 | Query form | **`CONSTRUCT`** full RDF subgraph (primary); `SELECT` IRIs (secondary toggle) |
-| Retrieval semantics | sub / super / equivalent class **and their (nested) expressions** |
+| Retrieval semantics | (all) sub / (all) super / **direct sub** / **direct super** / equivalent class **and their (nested) expressions**, plus **individuals** (instances) |
 | Store coupling | **Store-agnostic** — emit portable SPARQL; thin optional runners for owlready2 / pyoxigraph / rdflib / endpoint |
 | Input granularity | **Full Manchester frames** (`Class:`/`ObjectProperty:`/`Individual:`/`Datatype:` …) **and** bare class expressions |
 | Dependencies | `parsimonious`, `owlready2` (core); backends import-guarded |
@@ -139,27 +140,65 @@ given and returns it populated.
 ```python
 class_relations_query(
     target,                                  # IRI str | owlready2 ThingClass | parsed expression
-    relations=("sub", "super", "equiv"),     # any subset
+    relations=("super", "sub", "equiv"),     # any subset of the relation set below
     construct=True,                          # True → CONSTRUCT subgraph; False → SELECT IRIs
     prefixes=None,                           # for serialising prefixed IRIs in the query
 ) -> str
 ```
 
+### 5.0 Relation set
+
+Each relation name binds a `?rel` (related class) or `?ind` (individual) to `target`
+(`:C`). All are **asserted-graph** patterns — no reasoning. The caller picks any subset.
+
+| Relation | Meaning | Pattern (bind `?rel`/`?ind` to `:C`) |
+|---|---|---|
+| `super` | all superclasses (transitive) | `:C rdfs:subClassOf+ ?rel` |
+| `sub` | all subclasses (transitive) | `?rel rdfs:subClassOf+ :C` |
+| `direct_super` | **direct** superclasses (one hop, no redundancy) | `:C rdfs:subClassOf ?rel .` `FILTER NOT EXISTS { :C rdfs:subClassOf+ ?mid . ?mid rdfs:subClassOf+ ?rel . FILTER(?mid != :C && ?mid != ?rel) }` |
+| `direct_sub` | **direct** subclasses (one hop, no redundancy) | `?rel rdfs:subClassOf :C .` symmetric redundancy filter |
+| `equiv` | equivalent classes (both directions) | `:C owl:equivalentClass ?rel` UNION `?rel owl:equivalentClass :C` |
+| `individual` | individuals / instances | `?ind rdf:type :C` |
+
+Notes:
+- The **redundancy filter** makes `direct_*` correct even when the graph also asserts
+  transitive edges; for ontologies that assert only immediate edges it is a no-op.
+- `super`/`sub`/`direct_*` `?rel` may be a **named class or an anonymous expression**, so
+  each still gets the structural-predicate subgraph walk (§5.2).
+- `individual`: the CONSTRUCT returns the membership triple plus the individual's
+  one-hop asserted facts (`?ind ?p ?o`); anonymous individuals get the bnode walk too.
+
 ### 5.1 Named-class target (primary case)
 
-For `:Pizza`, `relations=("sub","super","equiv")`, `construct=True`:
+For `:Pizza`, `relations=("super","sub","direct_super","direct_sub","equiv","individual")`,
+`construct=True` — one `UNION` block per requested relation, each binding `?rel`/`?ind`,
+followed by the shared subgraph walk:
 
 ```sparql
 CONSTRUCT { ?s ?p ?o }
 WHERE {
-  { :Pizza rdfs:subClassOf  ?rel }          # superclasses
-  UNION { ?rel  rdfs:subClassOf  :Pizza }   # subclasses
-  UNION { :Pizza owl:equivalentClass ?rel } # equivalent (both directions)
+  {
+        { :Pizza rdfs:subClassOf+ ?rel }                    # super (transitive)
+  UNION { ?rel  rdfs:subClassOf+ :Pizza }                   # sub (transitive)
+  UNION { :Pizza rdfs:subClassOf  ?rel                      # direct_super
+          FILTER NOT EXISTS { :Pizza rdfs:subClassOf+ ?mid .
+                              ?mid rdfs:subClassOf+ ?rel .
+                              FILTER(?mid != :Pizza && ?mid != ?rel) } }
+  UNION { ?rel  rdfs:subClassOf  :Pizza                     # direct_sub (symmetric filter)
+          FILTER NOT EXISTS { ?rel rdfs:subClassOf+ ?mid .
+                              ?mid rdfs:subClassOf+ :Pizza .
+                              FILTER(?mid != :Pizza && ?mid != ?rel) } }
+  UNION { :Pizza owl:equivalentClass ?rel }                 # equiv (both directions)
   UNION { ?rel  owl:equivalentClass :Pizza }
-  ?rel <STRUCTURAL_PATH>* ?s .              # walk expression bnodes / RDF lists
-  ?s ?p ?o .
+  }
+  ?rel <STRUCTURAL_PATH>* ?s . ?s ?p ?o .                   # walk expression bnodes / RDF lists
 }
+UNION-ed with the individual block:
+  { ?ind rdf:type :Pizza . ?ind <STRUCTURAL_PATH>* ?s . ?s ?p ?o . }
 ```
+
+(The builder assembles only the requested relations; `individual` is projected via the
+same `CONSTRUCT { ?s ?p ?o }` head so one query returns the whole result graph.)
 
 ### 5.2 The structural-predicate property path (`vocab.py`) — the key technique
 
@@ -208,11 +247,15 @@ it and return an RDF graph (rdflib `Graph` for CONSTRUCT; rows for SELECT):
   OneOf, prefixed + full IRIs, inverse, data ranges.
 - **Parser (frames):** small Manchester documents → assert resulting owlready2 ontology
   (`is_a`, `equivalent_to`, disjointness, property characteristics, individuals).
-- **Converter:** golden SPARQL-string tests for each relation subset and CONSTRUCT/SELECT.
-- **End-to-end:** build a small pizza ontology in owlready2, serialise into a store, run
-  the generated CONSTRUCT, assert the returned subgraph contains the expected restriction
-  blank nodes and named classes. Run e2e against **both** owlready2's store **and**
-  pyoxigraph to prove store-agnosticism.
+- **Converter:** golden SPARQL-string tests for each relation
+  (`super`/`sub`/`direct_super`/`direct_sub`/`equiv`/`individual`) and CONSTRUCT/SELECT.
+- **End-to-end:** build a small pizza ontology in owlready2 with a multi-level class
+  hierarchy and a few individuals, serialise into a store, run the generated CONSTRUCT
+  per relation, and assert: transitive `super`/`sub` return the full chain; `direct_*`
+  return only immediate neighbours (redundancy filter drops the transitively-implied
+  ones); `individual` returns instances; anonymous superclass expressions come back as
+  full restriction blank-node subgraphs. Run e2e against **both** owlready2's store
+  **and** pyoxigraph to prove store-agnosticism.
 
 ## 8. Licensing / attribution
 
