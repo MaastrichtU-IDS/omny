@@ -65,3 +65,22 @@ def test_has_self(onto):
 def test_inverse_some(onto):
     ce = parse_expression("inverse hasTopping some Pizza", onto)
     assert isinstance(ce.property, owlready2.Inverse)
+
+
+def test_min_cardinality(onto):
+    ce = parse_expression("hasTopping min 2 Cheese", onto)
+    assert ce.type == owlready2.MIN
+    assert ce.cardinality == 2
+    assert ce.value.name == "Cheese"
+
+
+def test_max_cardinality(onto):
+    ce = parse_expression("hasTopping max 3 Cheese", onto)
+    assert ce.type == owlready2.MAX
+    assert ce.cardinality == 3
+
+
+def test_exactly_cardinality(onto):
+    ce = parse_expression("hasTopping exactly 1 Cheese", onto)
+    assert ce.type == owlready2.EXACTLY
+    assert ce.cardinality == 1
