@@ -1,5 +1,6 @@
 """Manchester document/frame loader: populates an owlready2 ontology."""
 import re
+import warnings
 from typing import Dict, List, Optional, Tuple
 
 import owlready2
@@ -24,6 +25,19 @@ _SECTION_RE = re.compile(
     r"^\s*(" + "|".join(_AXIOM_KEYWORDS) + r"):",
     re.M,
 )
+
+# All keywords that are valid at the document level (frame keywords + preamble keywords).
+# Used to suppress false-positive unknown-keyword warnings for top-level tokens.
+_FRAME_KEYWORDS = frozenset({
+    "Class", "ObjectProperty", "DataProperty", "Individual",
+    "Datatype", "AnnotationProperty",
+    "Prefix", "Ontology", "Import",
+})
+_ALL_KNOWN_KEYWORDS = frozenset(_AXIOM_KEYWORDS) | _FRAME_KEYWORDS
+
+# Regex that matches lines whose first token looks like "Word:" (an axiom or frame keyword).
+# Uses \w+ so prefixed names such as "rdfs:label" do NOT match (the colon is inside the name).
+_CANDIDATE_KW_RE = re.compile(r"^\s*(\w+):\s", re.M)
 
 
 def parse(text: str, onto: Optional[owlready2.Ontology] = None,
@@ -135,6 +149,14 @@ class FrameLoader:
         Result::
 
             {"SubClassOf": ["hasTopping some Cheese", "Thing"], "Domain": ["Pizza"]}
+
+        Known limitations:
+
+        * ``Import:`` directives are currently ignored (not loaded).
+        * The regex frame/section tokenizer is not string-aware: a line that begins
+          with a ``Keyword:``-like token *inside a multi-line quoted literal* can be
+          mis-split.  Single-line operands and the standard frame forms are fully
+          supported.
         """
         sections: Dict[str, List[str]] = {}
         matches = list(_SECTION_RE.finditer(body))
@@ -145,6 +167,19 @@ class FrameLoader:
             operands = self._split_commas(block)
             if operands:
                 sections[keyword] = operands
+
+        # Warn about lines that look like "Keyword: ..." but aren't in the known set.
+        # Uses a \w+-only match so prefixed names like "rdfs:label" are not flagged.
+        for m in _CANDIDATE_KW_RE.finditer(body):
+            kw = m.group(1)
+            if kw not in _ALL_KNOWN_KEYWORDS:
+                warnings.warn(
+                    f"Unknown axiom keyword {kw!r} in frame body; axioms under it "
+                    "will be silently dropped.",
+                    UserWarning,
+                    stacklevel=4,
+                )
+
         return sections
 
     @staticmethod
@@ -205,8 +240,7 @@ class FrameLoader:
             elif prop_name in ("rdfs:comment", "comment"):
                 entity.comment.append(value)
             else:
-                prop = (self.r.world[self.r.expand(prop_name)]
-                        or self.r.get_annotation_property(prop_name))
+                prop = self.r.get_annotation_property(prop_name)
                 name = self._py_name(prop)
                 setattr(entity, name, getattr(entity, name, []) + [value])
 
@@ -220,6 +254,13 @@ class FrameLoader:
         "Irreflexive": owlready2.IrreflexiveProperty,
     }
 
+    def _resolve_characteristic(self, ch: str):
+        """Return the owlready2 property mixin for *ch*, or raise ValueError."""
+        key = ch.strip()
+        if key not in self._CHARS:
+            raise ValueError(f"Unknown property characteristic {key!r}")
+        return self._CHARS[key]
+
     def _handle_object_property(self, subject: str, sections: dict) -> None:
         p = self.r.get_object_property(subject)
         for d in sections.get("Domain", []):
@@ -227,7 +268,7 @@ class FrameLoader:
         for rng in sections.get("Range", []):
             p.range.append(self._parse_ce(rng))
         for ch in sections.get("Characteristics", []):
-            p.is_a.append(self._CHARS[ch.strip()])
+            p.is_a.append(self._resolve_characteristic(ch))
         for inv in sections.get("InverseOf", []):
             p.inverse_property = self.r.get_object_property(inv)
         for sup in sections.get("SubPropertyOf", []):
@@ -241,7 +282,7 @@ class FrameLoader:
         for rng in sections.get("Range", []):
             p.range.append(self._parse_ce(rng))
         for ch in sections.get("Characteristics", []):
-            p.is_a.append(self._CHARS[ch.strip()])
+            p.is_a.append(self._resolve_characteristic(ch))
         for sup in sections.get("SubPropertyOf", []):
             p.is_a.append(self.r.get_data_property(sup))
         self._apply_annotations(p, sections.get("Annotations", []))
@@ -298,5 +339,8 @@ class FrameLoader:
         self.r.get_annotation_property(subject)
 
     def _handle_datatype(self, subject: str, sections: dict) -> None:
-        # Declare the datatype IRI so it's known; minimal — just ensure the IRI exists.
-        self.r.world._abbreviate(self.r.expand(subject))
+        iri = self.r.expand(subject)
+        s = self.r.world._abbreviate(iri)
+        p = self.r.world._abbreviate("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")
+        o = self.r.world._abbreviate("http://www.w3.org/2000/01/rdf-schema#Datatype")
+        self.r.onto._add_obj_triple_raw_spo(s, p, o)

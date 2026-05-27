@@ -59,6 +59,15 @@ class EntityResolver:
         return self._get_or_create(name, owlready2.DataProperty)
 
     def get_annotation_property(self, name: str):
+        iri = self.expand(name)
+        existing = self.world[iri]
+        if existing is not None:
+            if not isinstance(existing, owlready2.AnnotationPropertyClass):
+                raise ValueError(
+                    f"{name!r} is already declared as a non-annotation entity; "
+                    "punning an annotation property is not supported"
+                )
+            return existing
         return self._get_or_create(name, owlready2.AnnotationProperty)
 
     def get_individual(self, name: str) -> owlready2.Thing:

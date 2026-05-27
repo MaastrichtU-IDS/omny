@@ -86,3 +86,42 @@ def test_full_pizza_document():
     assert onto.world["http://ex.org/Margherita"] is not None
     import io
     onto.save(file=io.BytesIO(), format="rdfxml")
+
+
+# FIX 1 tests
+
+def test_custom_annotation_property():
+    doc = """
+    Prefix: : <http://ex.org/>
+    AnnotationProperty: note
+    Class: C
+        Annotations: note "hello"
+    """
+    onto = parse(doc)
+    c = onto.world["http://ex.org/C"]
+    assert "hello" in getattr(c, "note", [])
+
+
+def test_annotation_property_name_collision_raises():
+    doc = """
+    Prefix: : <http://ex.org/>
+    ObjectProperty: rel
+    Class: C
+        Annotations: rel "oops"
+    """
+    with pytest.raises(ValueError):
+        parse(doc)
+
+
+# FIX 2 test
+
+def test_datatype_declaration_emits_triple():
+    doc = """
+    Prefix: : <http://ex.org/>
+    Datatype: MyType
+    """
+    onto = parse(doc)
+    g = onto.world.as_rdflib_graph()
+    assert (rdflib.URIRef("http://ex.org/MyType"),
+            rdflib.URIRef("http://www.w3.org/1999/02/22-rdf-syntax-ns#type"),
+            rdflib.URIRef("http://www.w3.org/2000/01/rdf-schema#Datatype")) in g
