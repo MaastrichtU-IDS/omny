@@ -8,7 +8,6 @@ from pymos.entities import EntityResolver
 from pymos.parser import ManchesterParser
 
 _PREFIX_RE = re.compile(r"^\s*Prefix:\s*(\w*):\s*<([^>]+)>", re.M)
-_ONTOLOGY_IRI_RE = re.compile(r"^\s*Ontology:\s*<([^>]+)>", re.M)
 
 _FRAME_RE = re.compile(
     r"^\s*(Class|ObjectProperty|DataProperty|Individual|Datatype|AnnotationProperty):",
@@ -31,20 +30,20 @@ def parse(text: str, onto: Optional[owlready2.Ontology] = None,
           prefixes: Optional[Dict[str, str]] = None) -> owlready2.Ontology:
     """Parse a Manchester document and return a populated owlready2 Ontology.
 
-    If *onto* is None a fresh World + Ontology is created using the IRI from
-    the ``Ontology:`` header in the document, or a default IRI if absent.
+    ``Prefix:`` declarations in the document are extracted and merged with any
+    caller-supplied *prefixes*. ``Ontology:`` and ``Import:`` lines sit in the
+    preamble (before the first frame keyword) and are silently ignored by the
+    frame splitter; the ontology IRI is not inferred from them.
+
+    If *onto* is None a fresh World + Ontology with a default IRI is created.
     """
-    # Collect prefixes from the document first (we need them to resolve the
-    # Ontology IRI too).
+    # Collect prefixes from the document (needed to resolve entity IRIs).
     doc_prefixes: Dict[str, str] = {}
     for m in _PREFIX_RE.finditer(text):
         doc_prefixes[m.group(1)] = m.group(2)
 
     if onto is None:
-        # Try to pick up the ontology IRI from the Ontology: header.
-        m = _ONTOLOGY_IRI_RE.search(text)
-        base_iri = (m.group(1).rstrip("/") + "/") if m else "http://pymos.test/onto.owl"
-        onto = owlready2.World().get_ontology(base_iri)
+        onto = owlready2.World().get_ontology("http://pymos.test/onto.owl")
 
     prefixes = dict(prefixes or {})
     prefixes.update(doc_prefixes)
