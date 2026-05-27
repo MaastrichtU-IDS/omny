@@ -84,3 +84,9 @@ def test_exactly_cardinality(onto):
     ce = parse_expression("hasTopping exactly 1 Cheese", onto)
     assert ce.type == owlready2.EXACTLY
     assert ce.cardinality == 1
+
+
+def test_one_of(onto):
+    ce = parse_expression("{ a , b , c }", onto)
+    assert isinstance(ce, owlready2.OneOf)
+    assert {i.name for i in ce.instances} == {"a", "b", "c"}
