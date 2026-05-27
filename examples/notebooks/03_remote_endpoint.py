@@ -61,16 +61,20 @@ print("Triples in store:", r.json()["results"]["bindings"][0]["n"]["value"])
 # ## Query the remote endpoint with pymos
 #
 # `run_endpoint` sends the generated SPARQL to the live HTTP endpoint and returns
-# the bindings.
+# the SPARQL 1.1 JSON results object (a dict with `head` and `results`). For a
+# SELECT, the rows live under `results.bindings`, each keyed by the query's
+# projected variable (here `?rel`).
 
 # %%
 from pymos.store import run_endpoint
 
 q = class_relations_query(f"<{NS}Disease>", relations=("sub",), construct=False)
-rows = run_endpoint(q, f"{OXI}/query")
-print("Subclasses of Disease (from remote Oxigraph):")
-for row in rows:
-    print("  ", row)
+results = run_endpoint(q, f"{OXI}/query")
+var = results["head"]["vars"][0]
+bindings = results["results"]["bindings"]
+print(f"Subclasses of Disease (from remote Oxigraph) — {len(bindings)} found:")
+for b in bindings:
+    print("  ", b[var]["value"])
 
 # %% [markdown]
 # ## Takeaway
