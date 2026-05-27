@@ -1,5 +1,5 @@
 import rdflib
-from pymos.store import run_rdflib, run_pyoxigraph
+from pymos.store import run_rdflib
 
 
 def _graph():
@@ -24,7 +24,6 @@ def test_is_construct_helper():
 
 def test_run_owlready2_select_works_and_construct_raises():
     import pytest
-    import owlready2
     from pymos import parse, class_relations_query
     from pymos.store import run_owlready2
     onto = parse("""

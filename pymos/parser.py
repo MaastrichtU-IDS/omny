@@ -242,5 +242,20 @@ class ManchesterParser(NodeVisitor):
 
 def parse_expression(text: str, onto: owlready2.Ontology,
                      prefixes: Optional[Dict[str, str]] = None):
-    """Parse a single Manchester class expression into an owlready2 object."""
+    """Parse a single Manchester class expression into an owlready2 object.
+
+    Args:
+        text: A Manchester OWL class expression, e.g. ``"hasTopping some Cheese"``,
+            ``"Pizza and not VegetarianPizza"``, or a bare class name.
+        onto: The owlready2 ontology used to resolve and create classes and
+            properties referenced by the expression.
+        prefixes: Optional mapping of prefix label to base IRI, e.g.
+            ``{"ex": "http://example.org/"}``.  Short names are resolved against
+            the ontology's own namespace if no prefix applies.
+
+    Returns:
+        An owlready2 construct: a named class, ``owlready2.Restriction``,
+        ``owlready2.And``, ``owlready2.Or``, ``owlready2.Not``,
+        ``owlready2.OneOf``, or ``owlready2.ConstrainedDatatype``.
+    """
     return ManchesterParser(EntityResolver(onto, prefixes)).parse_expression(text)

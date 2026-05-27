@@ -42,14 +42,32 @@ _CANDIDATE_KW_RE = re.compile(r"^\s*(\w+):\s", re.M)
 
 def parse(text: str, onto: Optional[owlready2.Ontology] = None,
           prefixes: Optional[Dict[str, str]] = None) -> owlready2.Ontology:
-    """Parse a Manchester document and return a populated owlready2 Ontology.
+    """Parse a Manchester OWL document and return a populated owlready2 Ontology.
 
-    ``Prefix:`` declarations in the document are extracted and merged with any
-    caller-supplied *prefixes*. ``Ontology:`` and ``Import:`` lines sit in the
-    preamble (before the first frame keyword) and are silently ignored by the
-    frame splitter; the ontology IRI is not inferred from them.
+    Supports all standard Manchester frame types: ``Class``, ``ObjectProperty``,
+    ``DataProperty``, ``Individual``, ``Datatype``, and ``AnnotationProperty``,
+    with axiom keywords ``SubClassOf``, ``EquivalentTo``, ``DisjointWith``,
+    ``Domain``, ``Range``, ``Characteristics``, ``SubPropertyOf``, ``InverseOf``,
+    ``Types``, ``Facts``, ``SameAs``, ``DifferentFrom``, and ``Annotations``.
 
-    If *onto* is None a fresh World + Ontology with a default IRI is created.
+    Args:
+        text: A complete Manchester OWL document as a string.
+        onto: An existing owlready2 ``Ontology`` to populate.  If ``None``, a
+            fresh ``World`` and ``Ontology`` with a default IRI
+            (``http://pymos.test/onto.owl``) are created and returned.
+        prefixes: Optional mapping of prefix label to base IRI that supplements
+            any ``Prefix:`` declarations found in the document.
+
+    Returns:
+        The populated owlready2 ``Ontology`` (the same object as *onto* if
+        supplied, otherwise a newly created one).
+
+    Notes:
+        * ``Prefix:`` declarations in the document are extracted automatically and
+          merged with any caller-supplied *prefixes*.
+        * ``Ontology:`` and ``Import:`` preamble lines are silently ignored; the
+          ontology IRI is not inferred from them and imports are not fetched.
+        * Only the **asserted** graph is populated — no reasoner is invoked.
     """
     # Collect prefixes from the document (needed to resolve entity IRIs).
     doc_prefixes: Dict[str, str] = {}

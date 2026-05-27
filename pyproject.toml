@@ -23,3 +23,6 @@ include = ["pymos*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+[tool.ruff]
+extend-exclude = ["pymos/grammar.py"]

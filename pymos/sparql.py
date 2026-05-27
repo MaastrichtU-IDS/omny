@@ -52,6 +52,50 @@ def _target_iri(target) -> str:
 
 def class_relations_query(target, relations: Iterable[str] = ("super", "sub", "equiv"),
                           construct: bool = True) -> str:
+    """Build a store-agnostic SPARQL query for class-relation retrieval (asserted graph only).
+
+    Args:
+        target: The class to query about.  Accepts:
+
+            * An owlready2 class or entity (its ``.iri`` is used).
+            * A full IRI string with angle brackets: ``"<http://ex.org/Pizza>"``.
+            * A full IRI string without brackets: ``"http://ex.org/Pizza"``.
+            * A SPARQL variable: ``"?cls"`` (returns queries involving that variable).
+            * A prefixed name such as ``"ex:Pizza"`` (the prefix must be declared in
+              the query header, which only includes owl/rdf/rdfs/xsd by default).
+
+        relations: One or more of the six supported relation names (default:
+            ``("super", "sub", "equiv")``):
+
+            * ``"super"``        — transitive superclasses (``rdfs:subClassOf+``).
+            * ``"sub"``          — transitive subclasses (``rdfs:subClassOf+``).
+            * ``"direct_super"`` — immediate superclasses, redundancy-filtered.
+            * ``"direct_sub"``   — immediate subclasses, redundancy-filtered.
+            * ``"equiv"``        — equivalent classes (both directions of
+              ``owl:equivalentClass``).
+            * ``"individual"``   — instances of the class (``rdf:type``).
+
+        construct: If ``True`` (default) emit a SPARQL CONSTRUCT query returning the
+            full outgoing blank-node subgraph of every related class (structural
+            predicates only — see :data:`pymos.vocab.STRUCTURAL_PATH`).  This is
+            useful to materialise anonymous class-expression nodes attached to the
+            related classes.  If ``False``, emit a SELECT query returning just the
+            related IRIs (``?rel`` / ``?ind``).
+
+    Returns:
+        A SPARQL query string (starts with PREFIX declarations).
+
+    Notes:
+        * Only the **asserted** graph is queried — no reasoning/inference.
+        * CONSTRUCT returns each related class's *full* outgoing structural subgraph,
+          which includes its own ``subClassOf`` / restriction triples.  Use
+          ``construct=False`` for plain IRI-only retrieval.
+        * Anonymous-expression *targets* are not supported; ``target`` must resolve to
+          a named IRI or SPARQL variable.
+        * ``run_owlready2`` does not support CONSTRUCT; use
+          ``run_rdflib(q, world.as_rdflib_graph())`` for CONSTRUCT against owlready2
+          data.
+    """
     c = _target_iri(target)
     rels = list(relations)
     if not rels:

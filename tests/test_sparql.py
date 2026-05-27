@@ -1,5 +1,6 @@
 import pytest
-from pymos.sparql import _relation_clause
+import rdflib  # noqa: F401
+from pymos.sparql import _relation_clause, class_relations_query
 
 
 def _norm(s):
@@ -32,10 +33,6 @@ def test_equiv_both_directions():
 def test_individual_rdf_type():
     c = _relation_clause("individual", "<http://ex.org/Pizza>", "?ind")
     assert _norm(c) == _norm("?ind rdf:type <http://ex.org/Pizza> .")
-
-
-import rdflib  # noqa: F401
-from pymos.sparql import class_relations_query
 
 
 def test_construct_query_is_valid_sparql():
