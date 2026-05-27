@@ -67,3 +67,32 @@ def test_individual_retrieval():
                               construct=False)
     rows = run_rdflib(q, _rdflib_graph())
     assert any("myMargherita" in str(r[0]) for r in rows)
+
+
+def test_select_super_returns_only_iris():
+    q = class_relations_query("<http://ex.org/Margherita>", relations=("super",), construct=False)
+    rows = run_rdflib(q, _rdflib_graph())
+    assert rows  # non-empty
+    assert all(isinstance(r[0], rdflib.URIRef) for r in rows)  # no blank nodes
+
+
+def test_direct_sub_excludes_transitive():
+    # Food's direct subclass is Pizza; Margherita is indirect.
+    q = class_relations_query("<http://ex.org/Food>", relations=("direct_sub",), construct=False)
+    rows = run_rdflib(q, _rdflib_graph())
+    iris = {str(r[0]) for r in rows}
+    assert "http://ex.org/Pizza" in iris
+    assert "http://ex.org/Margherita" not in iris
+
+
+def test_equiv_both_directions():
+    q = class_relations_query("<http://ex.org/A>", relations=("equiv",), construct=False)
+    g = rdflib.Graph()
+    g.parse(data="""
+        @prefix ex: <http://ex.org/> .
+        @prefix owl: <http://www.w3.org/2002/07/owl#> .
+        ex:A owl:equivalentClass ex:B .
+        ex:C owl:equivalentClass ex:A .
+    """, format="turtle")
+    iris = {str(r[0]) for r in run_rdflib(q, g)}
+    assert {"http://ex.org/B", "http://ex.org/C"} <= iris

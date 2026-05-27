@@ -27,6 +27,19 @@ def _relation_clause(rel: str, c: str, var: str) -> str:
 
 
 def _target_iri(target) -> str:
+    """Normalise *target* to a SPARQL term string.
+
+    Accepts:
+    - A full IRI with angle brackets: ``"<http://ex.org/Pizza>"`` — returned as-is.
+    - A full IRI without brackets: ``"http://ex.org/Pizza"`` — wrapped in ``<>``.
+    - A SPARQL variable: ``"?cls"`` — returned as-is.
+    - An owlready2 entity (anything with a ``.iri`` attribute) — ``.iri`` is extracted
+      and wrapped in ``<>``.
+    - A prefixed name such as ``"ex:Pizza"`` — passed through as-is.  Only the prefixes
+      declared in :data:`pymos.vocab.PREFIXES` (owl/rdf/rdfs/xsd) are available in the
+      generated query header; a bare or unknown-prefixed name will fail at query
+      parse/execution time.
+    """
     if hasattr(target, "iri"):          # owlready2 entity
         return f"<{target.iri}>"
     t = str(target).strip()
@@ -41,6 +54,8 @@ def class_relations_query(target, relations: Iterable[str] = ("super", "sub", "e
                           construct: bool = True) -> str:
     c = _target_iri(target)
     rels = list(relations)
+    if not rels:
+        raise ValueError("at least one relation is required")
     unknown = set(rels) - set(RELATIONS)
     if unknown:
         raise ValueError(f"unknown relations: {sorted(unknown)}")
@@ -57,13 +72,13 @@ def class_relations_query(target, relations: Iterable[str] = ("super", "sub", "e
             if any(r in TARGET_ORIGINATING for r in class_rels):
                 blocks.append(f"{{ {c} {STRUCTURAL_PATH}* ?s . ?s ?p ?o . }}")
         else:
-            blocks.append(f"{{ {union} }}")
+            blocks.append(f"{{ {union} FILTER(isIRI(?rel)) }}")
     if want_individual:
         if construct:
             blocks.append(f"{{ {_relation_clause('individual', c, '?ind')} "
                           f"?ind {STRUCTURAL_PATH}* ?s . ?s ?p ?o . }}")
         else:
-            blocks.append(f"{{ {_relation_clause('individual', c, '?ind')} }}")
+            blocks.append(f"{{ {_relation_clause('individual', c, '?ind')} FILTER(isIRI(?ind)) }}")
 
     where = " UNION ".join(blocks)
     head = "CONSTRUCT { ?s ?p ?o }" if construct else (

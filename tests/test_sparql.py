@@ -1,3 +1,4 @@
+import pytest
 from pymos.sparql import _relation_clause
 
 
@@ -51,6 +52,11 @@ def test_select_mode_projects_iris():
     assert "SELECT DISTINCT ?rel" in q
     from rdflib.plugins.sparql import prepareQuery
     prepareQuery(q)
+
+
+def test_empty_relations_raises():
+    with pytest.raises(ValueError):
+        class_relations_query("<http://ex.org/X>", relations=())
 
 
 def test_named_class_accepts_owlready_class(onto):

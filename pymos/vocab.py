@@ -13,7 +13,12 @@ _STRUCTURAL_PREDICATES = [
     "owl:withRestrictions", "owl:intersectionOf", "owl:unionOf", "owl:complementOf",
     "owl:oneOf", "owl:minCardinality", "owl:maxCardinality", "owl:cardinality",
     "owl:minQualifiedCardinality", "owl:maxQualifiedCardinality",
-    "owl:qualifiedCardinality", "owl:inverseOf",
+    "owl:qualifiedCardinality",
+    # owl:inverseOf is included to capture inverse-property expressions in class axioms.
+    "owl:inverseOf",
+    # rdfs:subClassOf is deliberately EXCLUDED: walking it would traverse the class
+    # hierarchy and over-collect triples from ancestor/descendant classes instead of
+    # limiting the walk to the blank-node sub-graph of a single class expression.
     "rdf:first", "rdf:rest", "rdf:type",
 ]
 
