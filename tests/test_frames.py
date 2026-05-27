@@ -77,3 +77,12 @@ def test_individual_frame():
     same = rdflib.URIRef("http://www.w3.org/2002/07/owl#sameAs")
     assert (rdflib.URIRef("http://ex.org/bob"), same,
             rdflib.URIRef("http://ex.org/robert")) in g
+
+
+def test_full_pizza_document():
+    doc = open("tests/data/pizza.omn").read()
+    onto = parse(doc)
+    assert onto.world["http://ex.org/Pizza"] is not None
+    assert onto.world["http://ex.org/Margherita"] is not None
+    import io
+    onto.save(file=io.BytesIO(), format="rdfxml")

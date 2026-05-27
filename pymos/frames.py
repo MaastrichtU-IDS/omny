@@ -196,8 +196,19 @@ class FrameLoader:
         self._apply_annotations(cls, sections.get("Annotations", []))
 
     def _apply_annotations(self, entity, lines) -> None:
-        """No-op stub; replaced in Task 13."""
-        pass
+        """Apply annotation axioms from a list of 'prop_name "value"' strings."""
+        for line in lines:
+            prop_name, _, val = line.strip().partition(" ")
+            value = val.strip().strip('"')
+            if prop_name in ("rdfs:label", "label"):
+                entity.label.append(value)
+            elif prop_name in ("rdfs:comment", "comment"):
+                entity.comment.append(value)
+            else:
+                prop = (self.r.world[self.r.expand(prop_name)]
+                        or self.r.get_annotation_property(prop_name))
+                name = self._py_name(prop)
+                setattr(entity, name, getattr(entity, name, []) + [value])
 
     _CHARS = {
         "Functional": owlready2.FunctionalProperty,
@@ -284,16 +295,8 @@ class FrameLoader:
         self.r.onto._add_obj_triple_raw_spo(a.storid, sameas_storid, b.storid)
 
     def _handle_annotation_property(self, subject: str, sections: dict) -> None:
-        """Task 13: create the annotation property."""
-        iri = self.r.expand(subject)
-        existing = self.r.world[iri]
-        if existing is None:
-            ns_base, local = self.r._split(iri)
-            namespace = self.r.onto.get_namespace(ns_base)
-            with namespace:
-                import types as _types
-                _types.new_class(local, (owlready2.AnnotationProperty,))
+        self.r.get_annotation_property(subject)
 
     def _handle_datatype(self, subject: str, sections: dict) -> None:
-        """Task 13: datatype frames; no-op for now."""
-        pass
+        # Declare the datatype IRI so it's known; minimal — just ensure the IRI exists.
+        self.r.world._abbreviate(self.r.expand(subject))

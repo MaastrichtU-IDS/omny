@@ -1,0 +1,48 @@
+Prefix: : <http://ex.org/>
+Prefix: rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+Prefix: xsd: <http://www.w3.org/2001/XMLSchema#>
+
+Ontology: <http://ex.org/pizza.owl>
+
+AnnotationProperty: rdfs:label
+
+Datatype: xsd:integer
+
+Class: Pizza
+    Annotations: rdfs:label "Pizza"
+    SubClassOf: Food
+
+Class: Topping
+
+Class: Cheese
+    SubClassOf: Topping
+
+Class: Tomato
+    SubClassOf: Topping
+
+Class: Margherita
+    SubClassOf: Pizza, hasTopping some Cheese
+    EquivalentTo: hasTopping only (Cheese or Tomato)
+    DisjointWith: IceCream
+
+Class: IceCream
+
+Class: Food
+
+ObjectProperty: hasTopping
+    Domain: Pizza
+    Range: Topping
+    Characteristics: Transitive
+
+DataProperty: hasCalories
+    Domain: Pizza
+    Range: xsd:integer
+
+Individual: margherita1
+    Types: Margherita
+    Facts: hasCalories 800
+    SameAs: margheritaA
+    DifferentFrom: iceCream1
+
+Individual: iceCream1
+    Types: IceCream

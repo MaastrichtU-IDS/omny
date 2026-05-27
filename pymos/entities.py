@@ -58,6 +58,9 @@ class EntityResolver:
     def get_data_property(self, name: str) -> owlready2.DataPropertyClass:
         return self._get_or_create(name, owlready2.DataProperty)
 
+    def get_annotation_property(self, name: str):
+        return self._get_or_create(name, owlready2.AnnotationProperty)
+
     def get_individual(self, name: str) -> owlready2.Thing:
         iri = self.expand(name)
         existing = self.world[iri]
