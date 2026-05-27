@@ -48,11 +48,14 @@ def class_relations_query(target, relations: Iterable[str] = ("super", "sub", "e
     class_rels = [r for r in rels if r != "individual"]
     want_individual = "individual" in rels
 
+    TARGET_ORIGINATING = {"super", "direct_super", "equiv"}
     blocks = []
     if class_rels:
         union = " UNION ".join(f"{{ {_relation_clause(r, c, '?rel')} }}" for r in class_rels)
         if construct:
             blocks.append(f"{{ {union} ?rel {STRUCTURAL_PATH}* ?s . ?s ?p ?o . }}")
+            if any(r in TARGET_ORIGINATING for r in class_rels):
+                blocks.append(f"{{ {c} {STRUCTURAL_PATH}* ?s . ?s ?p ?o . }}")
         else:
             blocks.append(f"{{ {union} }}")
     if want_individual:
