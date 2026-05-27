@@ -1,0 +1,72 @@
+Prefix: : <http://example.org/biomed#>
+Prefix: rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+
+Ontology: <http://example.org/biomed>
+
+AnnotationProperty: rdfs:label
+
+ObjectProperty: treats
+    Domain: Drug
+    Range: Disease
+
+ObjectProperty: causes
+
+ObjectProperty: associatedWith
+
+ObjectProperty: hasTarget
+
+Class: BiologicalEntity
+    Annotations: rdfs:label "Biological Entity"
+
+Class: ChemicalEntity
+    Annotations: rdfs:label "Chemical Entity"
+
+Class: Disease
+    Annotations: rdfs:label "Disease"
+    SubClassOf: BiologicalEntity
+
+Class: InfectiousDisease
+    Annotations: rdfs:label "Infectious Disease"
+    SubClassOf: Disease
+
+Class: BacterialInfection
+    Annotations: rdfs:label "Bacterial Infection"
+    SubClassOf: InfectiousDisease
+
+Class: ViralInfection
+    Annotations: rdfs:label "Viral Infection"
+    SubClassOf: InfectiousDisease
+
+Class: GeneticDisease
+    Annotations: rdfs:label "Genetic Disease"
+    SubClassOf: Disease
+
+Class: Gene
+    Annotations: rdfs:label "Gene"
+    SubClassOf: BiologicalEntity
+
+Class: Drug
+    Annotations: rdfs:label "Drug"
+    SubClassOf: ChemicalEntity
+
+Class: Antibiotic
+    Annotations: rdfs:label "Antibiotic"
+    SubClassOf: Drug
+    EquivalentTo: Drug and (treats some BacterialInfection)
+
+Class: Antiviral
+    Annotations: rdfs:label "Antiviral"
+    SubClassOf: Drug
+    EquivalentTo: Drug and (treats some ViralInfection)
+
+Individual: amoxicillin
+    Types: Antibiotic
+
+Individual: strep_throat
+    Types: BacterialInfection
+
+Individual: influenza
+    Types: ViralInfection
+
+Individual: oseltamivir
+    Types: Antiviral
