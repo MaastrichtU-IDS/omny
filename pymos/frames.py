@@ -184,8 +184,20 @@ class FrameLoader:
     # ------------------------------------------------------------------
 
     def _handle_class(self, subject: str, sections: dict) -> None:
-        """Task 9 STUB: create the class; axioms added in Task 10."""
-        self.r.get_class(subject)
+        cls = self.r.get_class(subject)
+        for expr in sections.get("SubClassOf", []):
+            cls.is_a.append(self._parse_ce(expr))
+        for expr in sections.get("EquivalentTo", []):
+            cls.equivalent_to.append(self._parse_ce(expr))
+        disjoints = [self.r.get_class(x) for x in sections.get("DisjointWith", [])]
+        if disjoints:
+            with self.r.onto:
+                owlready2.AllDisjoint([cls, *disjoints])
+        self._apply_annotations(cls, sections.get("Annotations", []))
+
+    def _apply_annotations(self, entity, lines) -> None:
+        """No-op stub; replaced in Task 13."""
+        pass
 
     def _handle_object_property(self, subject: str, sections: dict) -> None:
         """Task 11: create the object property; axioms added later."""

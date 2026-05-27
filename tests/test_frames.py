@@ -15,7 +15,6 @@ def test_prefix_and_class_frame():
     assert pizza is not None
 
 
-@pytest.mark.xfail(reason="SubClassOf axioms completed in Task 10")
 def test_prefix_and_class_frame_subclassof():
     doc = """
     Prefix: : <http://ex.org/>
@@ -25,3 +24,20 @@ def test_prefix_and_class_frame_subclassof():
     onto = parse(doc)
     pizza = onto.world["http://ex.org/Pizza"]
     assert any(getattr(sc, "type", None) == owlready2.SOME for sc in pizza.is_a)
+
+
+def test_class_axioms():
+    doc = """
+    Prefix: : <http://ex.org/>
+    Class: Margherita
+        SubClassOf: Pizza, hasTopping some Cheese
+        EquivalentTo: hasTopping only (Cheese or Tomato)
+        DisjointWith: IceCream
+    """
+    onto = parse(doc)
+    m = onto.world["http://ex.org/Margherita"]
+    assert onto.world["http://ex.org/Pizza"] in m.is_a
+    assert len(m.equivalent_to) == 1
+    ice = onto.world["http://ex.org/IceCream"]
+    assert any(m in d.entities and ice in d.entities
+               for d in onto.disjoint_classes())
