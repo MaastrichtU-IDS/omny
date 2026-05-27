@@ -253,9 +253,11 @@ RUN pip install --no-cache-dir \
 
 EXPOSE 8888
 
-# Convert any paired .py sources to .ipynb, then launch JupyterLab with no token
-# (demo environment only).
-CMD ["bash", "-lc", "pip install -e . && jupytext --sync examples/notebooks/*.py 2>/dev/null; jupyter lab --ip=0.0.0.0 --port=8888 --no-browser --allow-root --ServerApp.token='' --ServerApp.password='' --notebook-dir=/workspace"]
+# Install pymos editable, then launch JupyterLab with no token (demo only).
+# NOTE: do NOT run `jupytext --sync` here — the .ipynb files are committed WITH
+# executed outputs (Task 8), and a startup sync from the output-less .py would
+# blank them. The jupytext.toml pairing handles sync when editing inside Jupyter.
+CMD ["bash", "-lc", "pip install -e . && jupyter lab --ip=0.0.0.0 --port=8888 --no-browser --allow-root --ServerApp.token='' --ServerApp.password='' --notebook-dir=/workspace"]
 ```
 
 - [ ] **Step 3: Build the image to verify it compiles**
@@ -831,9 +833,13 @@ git commit -m "test(examples): execute all notebooks end-to-end with live triple
   match the pymos public API verified in `pymos/__init__.py` and `pymos/store.py`.
   Namespace `http://example.org/biomed#` is consistent across ontology, tests, and
   notebooks. `pyoxigraph.RdfFormat.N_TRIPLES` matches the README usage example.
-- **Known risk:** Oxigraph `/store` and `/update` HTTP paths and the
-  `serve --location --bind` CLI are assumed from Oxigraph's documented server API; if
-  the `latest` image differs, Task 3 Step 3 (ASK probe) and Task 8 Step 3 will catch it
-  and the endpoint paths in notebook 03 / compose command must be adjusted to match the
-  running image's actual API.
+- **Oxigraph API verified** against `ghcr.io/oxigraph/oxigraph:latest` before
+  finalising this plan: entrypoint is `oxigraph` (so compose `command: ["serve", ...]`
+  is correct); `serve --location /data --bind 0.0.0.0:7878` ✓; `ASK{}` → boolean ✓;
+  POST N-Triples to `/store?default` → HTTP 201 ✓; `SELECT (COUNT(*) ...)` ✓;
+  `DROP DEFAULT` to `/update` → HTTP 204 ✓.
+- **Note (non-blocking):** `examples/tests/test_biomed.py` lives outside the
+  `testpaths = ["tests"]` configured in `pyproject.toml`, so a bare `pytest` from the
+  repo root will not collect it. It is invoked by explicit path (Task 1) — intended,
+  as it validates example data rather than the library.
 ```
