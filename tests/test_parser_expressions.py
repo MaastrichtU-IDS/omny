@@ -37,3 +37,31 @@ def test_complement(onto):
 def test_nested_precedence(onto):
     ce = parse_expression("A and (B or not C)", onto)
     assert isinstance(ce, owlready2.And)
+
+
+def test_some(onto):
+    ce = parse_expression("hasTopping some Cheese", onto)
+    assert ce.type == owlready2.SOME
+    assert ce.property.name == "hasTopping"
+    assert ce.value.name == "Cheese"
+
+
+def test_only(onto):
+    ce = parse_expression("hasTopping only Cheese", onto)
+    assert ce.type == owlready2.ONLY
+
+
+def test_value(onto):
+    ce = parse_expression("hasTopping value myCheese", onto)
+    assert ce.type == owlready2.VALUE
+    assert isinstance(ce.value, owlready2.Thing)
+
+
+def test_has_self(onto):
+    ce = parse_expression("likes Self", onto)
+    assert ce.type == owlready2.HAS_SELF
+
+
+def test_inverse_some(onto):
+    ce = parse_expression("inverse hasTopping some Pizza", onto)
+    assert isinstance(ce.property, owlready2.Inverse)
