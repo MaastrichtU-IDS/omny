@@ -68,3 +68,35 @@ def test_write_scaling_plots_produces_png(tmp_path):
     parse_png = out_dir / "parse_scaling.png"
     assert parse_png.exists()
     assert parse_png.stat().st_size > 0
+
+
+from bench.runners.report import write_report
+
+
+def test_write_report_emits_markdown(tmp_path):
+    results_json = tmp_path / "results.json"
+    results_json.write_text(json.dumps({
+        "env": {"host": "h", "platform": "p", "python": "3.12.1",
+                "pymos_sha": "abc1234", "timestamp": "2026-05-28 21:00:00",
+                "cpu_count": 8},
+        "cells": [
+            {"ontology": "pizza", "workload": "parse",
+             "backend": None, "reasoner": "none", "relation": None,
+             "construct": None, "target": None,
+             "measurement": {"wall_cold": 0.1, "wall_hot_median": 0.08,
+                             "wall_hot_samples": [0.08]*3, "wall_hot_stddev": 0.0,
+                             "peak_rss_bytes": 50_000_000, "peak_python_bytes": 1_000_000,
+                             "cpu_cold": 0.09, "cpu_hot_median": 0.07,
+                             "extras": {"axiom_count": 250, "bytes": 5000}},
+             "error": None, "skipped_reason": None},
+        ],
+    }))
+
+    md = tmp_path / "report.md"
+    write_report(results_json, md, floors={"owlrl": 0.05, "robot-docker": 2.4})
+    text = md.read_text()
+    assert "# Perf snapshot — 2026-05-28" in text
+    assert "## Headline" in text
+    assert "pizza" in text
+    assert "robot-docker" in text and "2.4" in text
+    assert "0.08" in text
