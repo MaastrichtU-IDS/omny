@@ -1,6 +1,7 @@
 from pymos import parse
 from bench.backends.owlready2_mem import OwlreadyMemBackend
 from bench.backends.pyoxigraph_mem import PyoxigraphMemBackend
+from bench.backends.rdflib_mem import RdflibMemBackend
 
 
 def test_owlready_mem_load_and_select(pizza_text):
@@ -32,4 +33,14 @@ def test_pyoxigraph_mem_load_and_construct(pizza_text):
     assert len(triples) > 0
     rows = list(b.select("SELECT (COUNT(?s) AS ?n) WHERE { ?s ?p ?o }"))
     assert int(rows[0]["n"].value) > 0
+    b.close()
+
+
+def test_rdflib_mem_load_and_construct(pizza_text):
+    onto = parse(pizza_text)
+    b = RdflibMemBackend()
+    b.load(onto)
+    g = b.construct("CONSTRUCT { ?s ?p ?o } WHERE { ?s ?p ?o } LIMIT 5")
+    triples = list(g)
+    assert len(triples) > 0
     b.close()
