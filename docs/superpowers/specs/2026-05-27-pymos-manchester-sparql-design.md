@@ -29,9 +29,12 @@ The existing options each fall short:
    classes — and its **individuals** (instances), **including the blank-node structure
    of any anonymous class expressions**.
 
+3. **Renders** an owlready2 ontology (or class expression) back to a Manchester OWL
+   document/string — full round-trip with the parser, preserving prefix declarations,
+   frames, and operator precedence.
+
 ### Non-goals (YAGNI)
 
-- owlready2 → Manchester *rendering* (round-trip out). Future.
 - Reasoning / entailment. pymos queries **asserted** RDF only; no inference. Inferred
   sub/super/equivalent is the caller's reasoner's job.
 - Reimplementing RDF/Turtle/OWL-XML parsing — owlready2/rdflib/pyoxigraph already do that.
@@ -47,6 +50,7 @@ The existing options each fall short:
 | Retrieval semantics | (all) sub / (all) super / **direct sub** / **direct super** / equivalent class **and their (nested) expressions**, plus **individuals** (instances) |
 | Store coupling | **Store-agnostic** — emit portable SPARQL; thin optional runners for owlready2 / pyoxigraph / rdflib / endpoint |
 | Input granularity | **Full Manchester frames** (`Class:`/`ObjectProperty:`/`Individual:`/`Datatype:` …) **and** bare class expressions |
+| Rendering | **owlready2 → Manchester** for expressions and full documents; round-trip with the parser |
 | Dependencies | `parsimonious`, `owlready2` (core); backends import-guarded |
 
 ## 3. Architecture & package layout
@@ -57,6 +61,7 @@ pymos/
   grammar.py      # vendored owlapy expression PEG + ADDED frame-level productions
   parser.py       # ManchesterParser: NodeVisitor → owlready2 objects (+ frame loader)
   sparql.py       # class-relation CONSTRUCT/SELECT converter (the novel deliverable)
+  render.py       # owlready2 → Manchester rendering (expressions, frames, documents)
   vocab.py        # OWL structural-predicate alphabet for blank-node subgraph walking
   store.py        # store-agnostic runners (owlready2 / pyoxigraph / rdflib / endpoint)
 docs/superpowers/specs/   # this spec + plan
@@ -229,6 +234,49 @@ attach the relation clauses to `?ce`. Implementation order: **named-class target
 
 `construct=False` projects the related IRIs (`SELECT DISTINCT ?rel`), dropping anonymous
 nodes — falls out of the same clause builder.
+
+## 5b. Renderer (`render.py`) — owlready2 → Manchester
+
+The mirror of the parser, closing the round-trip. Public API:
+
+```python
+render_expression(ce, prefixes=None) -> str             # one class expression
+render_frame(entity, prefixes=None) -> str              # one Class/Property/Individual/Datatype frame
+render(onto, prefixes=None, include_imports=True) -> str  # full document
+```
+
+**Expression rendering.** Dispatch by owlready2 type:
+
+| owlready2 | Manchester output |
+|---|---|
+| `ThingClass` (named) | prefixed name (if in `prefixes`) else `<full IRI>` |
+| `Restriction` `SOME`/`ONLY`/`VALUE`/`HAS_SELF` | `prop some/only/value/Self filler` |
+| `Restriction` `MIN`/`MAX`/`EXACTLY` | `prop min/max/exactly n filler` |
+| `And([…])` / `Or([…])` | `A and B` / `A or B`, with **parentheses around lower-precedence operands** |
+| `Not(X)` | `not X` |
+| `OneOf([…])` | `{ a , b , … }` |
+| `Inverse(p)` | `inverse p` |
+| `ConstrainedDatatype` | `dt [facet val, …]` |
+
+**Precedence (Manchester):** `not` > restriction/cardinality > `and` > `or`. A
+`_prec(ce)` helper returns the operator level; a child whose level is lower than the
+parent's gets wrapped in parentheses.
+
+**Frame rendering.** For each entity kind, emit the frame header line and one keyword
+line per non-empty axiom group: Class → `SubClassOf:`/`EquivalentTo:`/`DisjointWith:`;
+ObjectProperty/DataProperty → `Domain:`/`Range:`/`Characteristics:`/`SubPropertyOf:`/
+`InverseOf:`; Individual → `Types:`/`Facts:`/`SameAs:`/`DifferentFrom:`; Datatype +
+`Annotations:` (any frame).
+
+**Document rendering.** Emit `Prefix:` declarations from the prefix map (preferring
+short prefixed names in expression output), `Ontology:` IRI, then frames in stable
+order (Datatype → AnnotationProperty → ObjectProperty → DataProperty → Class →
+Individual) so output is diff-friendly and round-trip is deterministic.
+
+**Round-trip contract.** For any ontology produced by `parse(text)`, the sequence
+`render(onto) → parse → render` must be **idempotent at the second step** (string-stable).
+Structural equality on the first `parse → render → parse` round-trip is also required:
+same class IRIs, same axiom sets per class, same property characteristics.
 
 ## 6. Store runners (`store.py`) — store-agnostic
 
