@@ -69,6 +69,29 @@ class _Walker:
                 f"owl:onProperty {prop_iri} ; "
                 f"owl:hasValue <{r.value.iri}> ."
             )
+        CARD_MAP = {
+            owlready2.MIN: ("owl:minCardinality", "owl:minQualifiedCardinality"),
+            owlready2.MAX: ("owl:maxCardinality", "owl:maxQualifiedCardinality"),
+            owlready2.EXACTLY: ("owl:cardinality", "owl:qualifiedCardinality"),
+        }
+        if r.type in CARD_MAP:
+            n = int(r.cardinality)
+            n_lit = f'"{n}"^^xsd:nonNegativeInteger'
+            qualified = not (r.value is owlready2.Thing or r.value is None)
+            unq_pred, q_pred = CARD_MAP[r.type]
+            if qualified:
+                filler_term, extra = self.operand(r.value)
+                return var, (
+                    f"{var} a owl:Restriction ; "
+                    f"owl:onProperty {prop_iri} ; "
+                    f"{q_pred} {n_lit} ; "
+                    f"owl:onClass {filler_term} . {extra}"
+                )
+            return var, (
+                f"{var} a owl:Restriction ; "
+                f"owl:onProperty {prop_iri} ; "
+                f"{unq_pred} {n_lit} ."
+            )
         raise ValueError(
             f"restriction type {r.type} is not supported"
         )

@@ -74,3 +74,58 @@ def test_self_restriction():
         "owl:onProperty <http://ex.org/hasPart> ; "
         "owl:hasSelf true ."
     )
+
+
+def test_qualified_exactly():
+    onto = pymos.parse("""
+        Prefix: : <http://ex.org/>
+        Ontology: <http://ex.org/>
+        ObjectProperty: hasTopping
+        Class: Cheese
+    """)
+    expr = pymos.parse_expression("hasTopping exactly 2 Cheese", onto)
+    var, pattern = expression_to_pattern(expr)
+    assert var == "?t0"
+    assert _norm(pattern) == _norm(
+        '?t0 a owl:Restriction ; '
+        'owl:onProperty <http://ex.org/hasTopping> ; '
+        'owl:qualifiedCardinality "2"^^xsd:nonNegativeInteger ; '
+        'owl:onClass <http://ex.org/Cheese> .'
+    )
+
+
+def test_unqualified_min():
+    onto = pymos.parse("""
+        Prefix: : <http://ex.org/>
+        Ontology: <http://ex.org/>
+        ObjectProperty: hasTopping
+        Class: Cheese
+    """)
+    with onto:
+        p = onto.search_one(iri="http://ex.org/hasTopping")
+        expr = p.min(1)
+    var, pattern = expression_to_pattern(expr)
+    assert var == "?t0"
+    assert _norm(pattern) == _norm(
+        '?t0 a owl:Restriction ; '
+        'owl:onProperty <http://ex.org/hasTopping> ; '
+        'owl:minCardinality "1"^^xsd:nonNegativeInteger .'
+    )
+
+
+def test_qualified_max():
+    onto = pymos.parse("""
+        Prefix: : <http://ex.org/>
+        Ontology: <http://ex.org/>
+        ObjectProperty: hasTopping
+        Class: Cheese
+    """)
+    expr = pymos.parse_expression("hasTopping max 3 Cheese", onto)
+    var, pattern = expression_to_pattern(expr)
+    assert var == "?t0"
+    assert _norm(pattern) == _norm(
+        '?t0 a owl:Restriction ; '
+        'owl:onProperty <http://ex.org/hasTopping> ; '
+        'owl:maxQualifiedCardinality "3"^^xsd:nonNegativeInteger ; '
+        'owl:onClass <http://ex.org/Cheese> .'
+    )
