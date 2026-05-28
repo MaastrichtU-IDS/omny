@@ -15,8 +15,9 @@ structurally skipped (owlready2 CONSTRUCT).
 
 ### v1 scope note
 
-- **Ontologies**: pizza only (test fixture, 10 axioms). Wine download succeeded but ROBOT OWL/XML
-  conversion hung on network import resolution and was aborted; family.owl returned HTTP 404.
+- **Ontologies**: pizza only (test fixture, 10 axioms). Wine rdfxml downloaded but ROBOT OWL/XML
+  conversion appeared to hang (~3 s CPU over 10+ min, likely awaiting network import resolution);
+  aborted manually. family.owl returned HTTP 404.
 - **Reasoners**: `none` only. The snapshot runner does not yet wire `reasoner.materialise()` into
   the query workload — v2 follow-up. Running `owlrl` with the current code would produce duplicate
   asserted-graph measurements under a different label, which is misleading.
