@@ -38,15 +38,37 @@ class _Walker:
     def _restriction(self, r: owlready2.Restriction) -> tuple[str, str]:
         var = self.fresh()
         prop_iri = f"<{r.property.iri}>"
-        if r.type == owlready2.SOME:
-            filler_term, extra = self.operand(r.value)
-            pattern = (
+        if r.type == owlready2.HAS_SELF:
+            return var, (
                 f"{var} a owl:Restriction ; "
                 f"owl:onProperty {prop_iri} ; "
-                f"owl:someValuesFrom {filler_term} . "
-                f"{extra}"
+                f"owl:hasSelf true ."
             )
-            return var, pattern
+        if r.type == owlready2.SOME:
+            filler_term, extra = self.operand(r.value)
+            return var, (
+                f"{var} a owl:Restriction ; "
+                f"owl:onProperty {prop_iri} ; "
+                f"owl:someValuesFrom {filler_term} . {extra}"
+            )
+        if r.type == owlready2.ONLY:
+            filler_term, extra = self.operand(r.value)
+            return var, (
+                f"{var} a owl:Restriction ; "
+                f"owl:onProperty {prop_iri} ; "
+                f"owl:allValuesFrom {filler_term} . {extra}"
+            )
+        if r.type == owlready2.VALUE:
+            if not hasattr(r.value, "iri"):
+                raise ValueError(
+                    "hasValue with a literal target is not supported "
+                    "(use a named individual)"
+                )
+            return var, (
+                f"{var} a owl:Restriction ; "
+                f"owl:onProperty {prop_iri} ; "
+                f"owl:hasValue <{r.value.iri}> ."
+            )
         raise ValueError(
             f"restriction type {r.type} is not supported"
         )
