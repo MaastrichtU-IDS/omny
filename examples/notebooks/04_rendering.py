@@ -78,7 +78,7 @@ Class: Antibiotic
 ObjectProperty: treats
     Domain: Drug
     Range: Disease
-    Characteristics: Transitive
+    Characteristics: Functional
 
 Individual: penicillin
     Types: Antibiotic
