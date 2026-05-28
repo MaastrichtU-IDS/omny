@@ -66,3 +66,22 @@ def test_owlready_sqlite_persists_across_handles(pizza_text, tmp_path):
     assert rows1 == rows2
     assert b2.is_persistent is True
     b2.close()
+
+
+from bench.backends.pyoxigraph_rocksdb import PyoxigraphRocksdbBackend
+
+
+def test_pyoxigraph_rocksdb_persists(pizza_text, tmp_path):
+    onto = parse(pizza_text)
+    db = tmp_path / "pizza.ox"
+
+    b1 = PyoxigraphRocksdbBackend(db)
+    b1.load(onto)
+    n1 = list(b1.select("SELECT (COUNT(?s) AS ?n) WHERE { ?s ?p ?o }"))[0]["n"].value
+    b1.close()
+
+    b2 = PyoxigraphRocksdbBackend(db)
+    n2 = list(b2.select("SELECT (COUNT(?s) AS ?n) WHERE { ?s ?p ?o }"))[0]["n"].value
+    assert n1 == n2
+    assert b2.is_persistent is True
+    b2.close()
