@@ -149,6 +149,21 @@ _PROP_BASES = (
     owlready2.AnnotationProperty,
 )
 
+_RDFS = "http://www.w3.org/2000/01/rdf-schema#"
+_RDF = "http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+_OWL = "http://www.w3.org/2002/07/owl#"
+_BUILTIN_ANNOTATION_IRIS = (
+    _RDFS + "label",
+    _RDFS + "comment",
+    _RDFS + "seeAlso",
+    _RDFS + "isDefinedBy",
+    _OWL + "versionInfo",
+    _OWL + "deprecated",
+    _OWL + "incompatibleWith",
+    _OWL + "backwardCompatibleWith",
+    _OWL + "priorVersion",
+)
+
 
 def _kw_line(label: str, operands: Iterable, p: Dict[str, str], indent: str = "    ") -> str:
     items = list(operands)
@@ -198,6 +213,83 @@ def _individual_types_excluding_thing(ind) -> list:
     return [t for t in ind.is_a if t is not owlready2.Thing]
 
 
+def _python_attr_for(prop) -> str:
+    return getattr(prop, "python_name", None) or prop.name
+
+
+def _annotation_properties_for(entity) -> list:
+    """All annotation properties to check for values on `entity`: built-ins
+    plus any AnnotationProperty registered in the world."""
+    world = entity.namespace.world
+    aps = []
+    seen = set()
+    for iri in _BUILTIN_ANNOTATION_IRIS:
+        e = world[iri]
+        if e is not None and e.iri not in seen:
+            aps.append(e)
+            seen.add(e.iri)
+    for ap in world.annotation_properties():
+        if ap.iri not in seen:
+            aps.append(ap)
+            seen.add(ap.iri)
+    return aps
+
+
+def _render_annotation_value(v, p: Dict[str, str]) -> str:
+    if hasattr(v, "iri"):
+        return _name(v, p)
+    if isinstance(v, owlready2.locstr):
+        return f'"{v}"@{v.lang}' if v.lang else f'"{v}"'
+    return _render_literal(v)
+
+
+def _annotations_line(entity, p: Dict[str, str], indent: str = "    ") -> str:
+    """Collect (ap, value) pairs and emit a single `Annotations:` line."""
+    pairs = []
+    for ap in _annotation_properties_for(entity):
+        vals = getattr(entity, _python_attr_for(ap), None)
+        if not vals:
+            continue
+        for v in (vals if isinstance(vals, list) else [vals]):
+            pairs.append(f"{_name(ap, p)} {_render_annotation_value(v, p)}")
+    if not pairs:
+        return ""
+    return f"{indent}Annotations: {', '.join(pairs)}\n"
+
+
+def _individual_facts(ind, p: Dict[str, str]) -> list:
+    """Return rendered `prop filler` strings for each asserted property value."""
+    world = ind.namespace.world
+    out = []
+    for prop in list(world.object_properties()) + list(world.data_properties()):
+        vals = getattr(ind, _python_attr_for(prop), None)
+        if not vals:
+            continue
+        for v in (vals if isinstance(vals, list) else [vals]):
+            out.append(f"{_name(prop, p)} {_render_value_filler(v, p)}")
+    return out
+
+
+def _individual_sameas(ind) -> list:
+    """Other individuals declared owl:sameAs to `ind` (via equivalent_to)."""
+    return [e for e in ind.equivalent_to if hasattr(e, "iri") and e is not ind]
+
+
+def _individual_different_partners(ind) -> list:
+    """Individuals appearing in any AllDifferent group with `ind`."""
+    partners = []
+    seen = set()
+    for d in ind.namespace.ontology.different_individuals():
+        ents = list(d.entities)
+        if ind in ents:
+            for e in ents:
+                if e is ind or e.iri in seen:
+                    continue
+                seen.add(e.iri)
+                partners.append(e)
+    return partners
+
+
 def render_frame(entity, prefixes: Optional[Dict[str, str]] = None) -> str:
     """Render one owlready2 entity to its Manchester frame text."""
     p = dict(prefixes or {})
@@ -208,13 +300,23 @@ def render_frame(entity, prefixes: Optional[Dict[str, str]] = None) -> str:
 
     if isinstance(entity, owlready2.ThingClass):
         out = f"Class: {name}\n"
+        out += _annotations_line(entity, p)
         out += _kw_line("SubClassOf", _class_supers_excluding_thing(entity), p)
         out += _kw_line("EquivalentTo", list(entity.equivalent_to), p)
         out += _kw_line("DisjointWith", _find_disjoint_partners(entity), p)
         return out
 
+    if isinstance(entity, owlready2.AnnotationPropertyClass):
+        out = f"AnnotationProperty: {name}\n"
+        out += _annotations_line(entity, p)
+        sups = _user_super_properties(entity)
+        if sups:
+            out += _kw_line("SubPropertyOf", sups, p)
+        return out
+
     if isinstance(entity, owlready2.ObjectPropertyClass):
         out = f"ObjectProperty: {name}\n"
+        out += _annotations_line(entity, p)
         out += _kw_line("Domain", list(entity.domain), p)
         out += _kw_line("Range",  list(entity.range), p)
         chars = _characteristic_labels(entity)
@@ -229,6 +331,7 @@ def render_frame(entity, prefixes: Optional[Dict[str, str]] = None) -> str:
 
     if isinstance(entity, owlready2.DataPropertyClass):
         out = f"DataProperty: {name}\n"
+        out += _annotations_line(entity, p)
         out += _kw_line("Domain", list(entity.domain), p)
         out += _kw_line("Range",  list(entity.range), p)
         chars = _characteristic_labels(entity)
@@ -241,7 +344,17 @@ def render_frame(entity, prefixes: Optional[Dict[str, str]] = None) -> str:
 
     if isinstance(entity, owlready2.Thing):  # individuals
         out = f"Individual: {name}\n"
+        out += _annotations_line(entity, p)
         out += _kw_line("Types", _individual_types_excluding_thing(entity), p)
+        facts = _individual_facts(entity, p)
+        if facts:
+            out += f"    Facts: {', '.join(facts)}\n"
+        sames = _individual_sameas(entity)
+        if sames:
+            out += _kw_line("SameAs", sames, p)
+        diffs = _individual_different_partners(entity)
+        if diffs:
+            out += _kw_line("DifferentFrom", diffs, p)
         return out
 
     raise ValueError(f"cannot render frame for {entity!r}")
@@ -249,15 +362,23 @@ def render_frame(entity, prefixes: Optional[Dict[str, str]] = None) -> str:
 
 # --- Document rendering ------------------------------------------------------
 
+def _declared_datatype_iris(onto) -> list:
+    """IRIs declared as rdfs:Datatype in this ontology's world."""
+    import rdflib
+    g = onto.world.as_rdflib_graph()
+    dt = rdflib.URIRef(_RDFS + "Datatype")
+    return sorted({str(s) for s in g.subjects(rdflib.RDF.type, dt)})
+
+
 def render(onto, prefixes: Optional[Dict[str, str]] = None,
            include_imports: bool = True) -> str:
     """Render an owlready2 ontology as a Manchester OWL syntax document.
 
-    Currently emits Prefix declarations + Ontology header, then frames in the
-    order ObjectProperty -> DataProperty -> Class -> Individual (each sorted
-    by IRI for diff-stability). Annotations, Individual Facts/SameAs/
-    DifferentFrom, AnnotationProperty and Datatype frames are not yet rendered;
-    a follow-up will extend `render_frame` to cover them.
+    Emits Prefix declarations + Ontology header, then frames in stable order:
+    Datatype, AnnotationProperty, ObjectProperty, DataProperty, Class, Individual
+    (each group sorted by IRI for diff-stability). Includes Annotations,
+    Individual Facts/SameAs/DifferentFrom, Object/DataProperty characteristics
+    + InverseOf, and DisjointWith partners.
     """
     p = dict(prefixes or {})
     parts = []
@@ -274,11 +395,21 @@ def render(onto, prefixes: Optional[Dict[str, str]] = None,
 
     parts.append("")  # blank line before frames
 
+    datatype_iris = _declared_datatype_iris(onto)
+    for dt_iri in datatype_iris:
+        parts.append(f"Datatype: {_shorten(dt_iri, p)}\n")
+
+    for ap in sorted(onto.world.annotation_properties(), key=lambda e: e.iri):
+        parts.append(render_frame(ap, p))
     for op in sorted(onto.object_properties(), key=lambda e: e.iri):
         parts.append(render_frame(op, p))
     for dp in sorted(onto.data_properties(), key=lambda e: e.iri):
         parts.append(render_frame(dp, p))
+    # Skip classes whose IRI was declared as a Datatype (avoid duplicate frames).
+    datatype_set = set(datatype_iris)
     for cls in sorted(onto.classes(), key=lambda e: e.iri):
+        if cls.iri in datatype_set:
+            continue
         parts.append(render_frame(cls, p))
     for ind in sorted(onto.individuals(), key=lambda e: e.iri):
         parts.append(render_frame(ind, p))
