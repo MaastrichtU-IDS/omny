@@ -127,3 +127,121 @@ def _render_value_filler(value, p: Dict[str, str]) -> str:
     if hasattr(value, "iri"):
         return _name(value, p)
     return _render_literal(value)
+
+
+# --- Frame rendering ----------------------------------------------------------
+
+_CHAR_NAMES = (
+    (owlready2.FunctionalProperty, "Functional"),
+    (owlready2.InverseFunctionalProperty, "InverseFunctional"),
+    (owlready2.TransitiveProperty, "Transitive"),
+    (owlready2.SymmetricProperty, "Symmetric"),
+    (owlready2.AsymmetricProperty, "Asymmetric"),
+    (owlready2.ReflexiveProperty, "Reflexive"),
+    (owlready2.IrreflexiveProperty, "Irreflexive"),
+)
+
+# Base property classes owlready2 inserts in `is_a` that are not characteristics
+# nor user-declared superproperties — filter them out when rendering.
+_PROP_BASES = (
+    owlready2.ObjectProperty,
+    owlready2.DataProperty,
+    owlready2.AnnotationProperty,
+)
+
+
+def _kw_line(label: str, operands: Iterable, p: Dict[str, str], indent: str = "    ") -> str:
+    items = list(operands)
+    if not items:
+        return ""
+    rendered = ", ".join(_render(o, p, _PREC_ATOM) for o in items)
+    return f"{indent}{label}: {rendered}\n"
+
+
+def _find_disjoint_partners(cls) -> list:
+    """Return classes appearing in any AllDisjoint group together with `cls`."""
+    partners = []
+    seen = set()
+    for d in cls.namespace.ontology.disjoint_classes():
+        ents = list(d.entities)
+        if cls in ents:
+            for e in ents:
+                if e is cls or e.iri in seen:
+                    continue
+                seen.add(e.iri)
+                partners.append(e)
+    return partners
+
+
+def _characteristic_labels(prop) -> list:
+    labels = []
+    for char_cls, label in _CHAR_NAMES:
+        if char_cls in prop.is_a:
+            labels.append(label)
+    return labels
+
+
+def _user_super_properties(prop) -> list:
+    """Properties in `prop.is_a` that are neither base kinds nor characteristics."""
+    chars = {c for c, _ in _CHAR_NAMES}
+    return [
+        s for s in prop.is_a
+        if s not in _PROP_BASES and s not in chars and s is not prop
+    ]
+
+
+def _class_supers_excluding_thing(cls) -> list:
+    return [s for s in cls.is_a if s is not owlready2.Thing]
+
+
+def _individual_types_excluding_thing(ind) -> list:
+    return [t for t in ind.is_a if t is not owlready2.Thing]
+
+
+def render_frame(entity, prefixes: Optional[Dict[str, str]] = None) -> str:
+    """Render one owlready2 entity to its Manchester frame text."""
+    p = dict(prefixes or {})
+    iri = getattr(entity, "iri", None)
+    if iri is None:
+        raise ValueError(f"cannot render frame for {entity!r}")
+    name = _shorten(iri, p)
+
+    if isinstance(entity, owlready2.ThingClass):
+        out = f"Class: {name}\n"
+        out += _kw_line("SubClassOf", _class_supers_excluding_thing(entity), p)
+        out += _kw_line("EquivalentTo", list(entity.equivalent_to), p)
+        out += _kw_line("DisjointWith", _find_disjoint_partners(entity), p)
+        return out
+
+    if isinstance(entity, owlready2.ObjectPropertyClass):
+        out = f"ObjectProperty: {name}\n"
+        out += _kw_line("Domain", list(entity.domain), p)
+        out += _kw_line("Range",  list(entity.range), p)
+        chars = _characteristic_labels(entity)
+        if chars:
+            out += f"    Characteristics: {', '.join(chars)}\n"
+        sups = _user_super_properties(entity)
+        if sups:
+            out += _kw_line("SubPropertyOf", sups, p)
+        if entity.inverse_property is not None:
+            out += f"    InverseOf: {_name(entity.inverse_property, p)}\n"
+        return out
+
+    if isinstance(entity, owlready2.DataPropertyClass):
+        out = f"DataProperty: {name}\n"
+        out += _kw_line("Domain", list(entity.domain), p)
+        out += _kw_line("Range",  list(entity.range), p)
+        chars = _characteristic_labels(entity)
+        if chars:
+            out += f"    Characteristics: {', '.join(chars)}\n"
+        sups = _user_super_properties(entity)
+        if sups:
+            out += _kw_line("SubPropertyOf", sups, p)
+        return out
+
+    if isinstance(entity, owlready2.Thing):  # individuals
+        out = f"Individual: {name}\n"
+        out += _kw_line("Types", _individual_types_excluding_thing(entity), p)
+        return out
+
+    raise ValueError(f"cannot render frame for {entity!r}")
