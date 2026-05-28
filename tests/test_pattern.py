@@ -224,6 +224,25 @@ def test_complement_anonymous():
     )
 
 
+def test_inverse_property_some():
+    onto = pymos.parse("""
+        Prefix: : <http://ex.org/>
+        Ontology: <http://ex.org/>
+        ObjectProperty: hasPart
+        Class: A
+    """)
+    expr = pymos.parse_expression("inverse hasPart some A", onto)
+    var, pattern = expression_to_pattern(expr)
+    assert var == "?t0"
+    # ?t1 is the inverse-property blank node bound to owl:onProperty.
+    assert _norm(pattern) == _norm(
+        "?t0 a owl:Restriction ; "
+        "owl:onProperty ?t1 ; "
+        "owl:someValuesFrom <http://ex.org/A> . "
+        "?t1 owl:inverseOf <http://ex.org/hasPart> ."
+    )
+
+
 def test_one_of():
     onto = pymos.parse("""
         Prefix: : <http://ex.org/>

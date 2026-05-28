@@ -66,28 +66,43 @@ class _Walker:
             f"anonymous target of type {type(expr).__name__} is not supported"
         )
 
+    def _property_term(self, prop) -> tuple[str, str]:
+        """Return (sparql_term, extra_pattern) for a property in onProperty position.
+
+        A named property becomes ``<iri>`` with no extra. An inverse property
+        becomes a fresh blank-node variable bound by an ``owl:inverseOf`` triple.
+        """
+        if hasattr(prop, "iri"):
+            return f"<{prop.iri}>", ""
+        if isinstance(prop, owlready2.Inverse):
+            var = self.fresh()
+            return var, f"{var} owl:inverseOf <{prop.property.iri}> ."
+        raise ValueError(
+            f"unsupported property kind: {type(prop).__name__}"
+        )
+
     def _restriction(self, r: owlready2.Restriction) -> tuple[str, str]:
         var = self.fresh()
-        prop_iri = f"<{r.property.iri}>"
+        prop_term, prop_extra = self._property_term(r.property)
         if r.type == owlready2.HAS_SELF:
             return var, (
                 f"{var} a owl:Restriction ; "
-                f"owl:onProperty {prop_iri} ; "
-                f"owl:hasSelf true ."
+                f"owl:onProperty {prop_term} ; "
+                f"owl:hasSelf true . {prop_extra}"
             )
         if r.type == owlready2.SOME:
             filler_term, extra = self.operand(r.value)
             return var, (
                 f"{var} a owl:Restriction ; "
-                f"owl:onProperty {prop_iri} ; "
-                f"owl:someValuesFrom {filler_term} . {extra}"
+                f"owl:onProperty {prop_term} ; "
+                f"owl:someValuesFrom {filler_term} . {extra} {prop_extra}"
             )
         if r.type == owlready2.ONLY:
             filler_term, extra = self.operand(r.value)
             return var, (
                 f"{var} a owl:Restriction ; "
-                f"owl:onProperty {prop_iri} ; "
-                f"owl:allValuesFrom {filler_term} . {extra}"
+                f"owl:onProperty {prop_term} ; "
+                f"owl:allValuesFrom {filler_term} . {extra} {prop_extra}"
             )
         if r.type == owlready2.VALUE:
             if not hasattr(r.value, "iri"):
@@ -97,8 +112,8 @@ class _Walker:
                 )
             return var, (
                 f"{var} a owl:Restriction ; "
-                f"owl:onProperty {prop_iri} ; "
-                f"owl:hasValue <{r.value.iri}> ."
+                f"owl:onProperty {prop_term} ; "
+                f"owl:hasValue <{r.value.iri}> . {prop_extra}"
             )
         CARD_MAP = {
             owlready2.MIN: ("owl:minCardinality", "owl:minQualifiedCardinality"),
@@ -114,14 +129,14 @@ class _Walker:
                 filler_term, extra = self.operand(r.value)
                 return var, (
                     f"{var} a owl:Restriction ; "
-                    f"owl:onProperty {prop_iri} ; "
+                    f"owl:onProperty {prop_term} ; "
                     f"{q_pred} {n_lit} ; "
-                    f"owl:onClass {filler_term} . {extra}"
+                    f"owl:onClass {filler_term} . {extra} {prop_extra}"
                 )
             return var, (
                 f"{var} a owl:Restriction ; "
-                f"owl:onProperty {prop_iri} ; "
-                f"{unq_pred} {n_lit} ."
+                f"owl:onProperty {prop_term} ; "
+                f"{unq_pred} {n_lit} . {prop_extra}"
             )
         raise ValueError(
             f"restriction type {r.type} is not supported"
