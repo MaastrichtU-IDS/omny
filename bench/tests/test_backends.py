@@ -85,3 +85,19 @@ def test_pyoxigraph_rocksdb_persists(pizza_text, tmp_path):
     assert n1 == n2
     assert b2.is_persistent is True
     b2.close()
+
+
+from bench.backends.endpoint_oxigraph import EndpointOxigraphBackend
+from bench.tests.conftest import requires_docker
+
+
+@requires_docker
+def test_endpoint_oxigraph_load_and_query(pizza_text):
+    onto = parse(pizza_text)
+    b = EndpointOxigraphBackend()  # spins up an ephemeral container on a random port
+    try:
+        b.load(onto)
+        rows = list(b.select("SELECT (COUNT(?s) AS ?n) WHERE { ?s ?p ?o }"))
+        assert int(rows[0]["n"]) > 0
+    finally:
+        b.close()
