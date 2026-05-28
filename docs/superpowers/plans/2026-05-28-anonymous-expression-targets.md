@@ -55,6 +55,7 @@ def _norm(s):
 def _parse(expr_text):
     onto = pymos.parse("""
         Prefix: : <http://ex.org/>
+        Ontology: <http://ex.org/>
         ObjectProperty: treats
         ObjectProperty: hasTopping
         Class: Drug
@@ -189,6 +190,7 @@ def test_all_values_from():
 def test_has_value_individual():
     onto = pymos.parse("""
         Prefix: : <http://ex.org/>
+        Ontology: <http://ex.org/>
         ObjectProperty: hasTopping
         Class: Cheese
         Individual: myCheese Types: Cheese
@@ -206,6 +208,7 @@ def test_has_value_individual():
 def test_self_restriction():
     onto = pymos.parse("""
         Prefix: : <http://ex.org/>
+        Ontology: <http://ex.org/>
         ObjectProperty: hasPart
     """)
     expr = pymos.parse_expression("hasPart Self", onto)
@@ -272,7 +275,7 @@ Quick interactive check before adding Self handling:
 ```bash
 python -c "
 import pymos, owlready2 as o
-onto = pymos.parse('Prefix: : <http://ex.org/>\nObjectProperty: hasPart')
+onto = pymos.parse('Prefix: : <http://ex.org/>\nOntology: <http://ex.org/>\nObjectProperty: hasPart')
 e = pymos.parse_expression('hasPart Self', onto)
 print(type(e).__name__, 'type=', e.type, 'value=', e.value, 'value is property?', e.value is onto.world['http://ex.org/hasPart'])
 "
@@ -325,6 +328,7 @@ Append to `tests/test_pattern.py`:
 def test_qualified_exactly():
     onto = pymos.parse("""
         Prefix: : <http://ex.org/>
+        Ontology: <http://ex.org/>
         ObjectProperty: hasTopping
         Class: Cheese
     """)
@@ -342,6 +346,7 @@ def test_qualified_exactly():
 def test_unqualified_min():
     onto = pymos.parse("""
         Prefix: : <http://ex.org/>
+        Ontology: <http://ex.org/>
         ObjectProperty: hasTopping
     """)
     expr = pymos.parse_expression("hasTopping min 1", onto)
@@ -357,6 +362,7 @@ def test_unqualified_min():
 def test_qualified_max():
     onto = pymos.parse("""
         Prefix: : <http://ex.org/>
+        Ontology: <http://ex.org/>
         ObjectProperty: hasTopping
         Class: Cheese
     """)
@@ -376,7 +382,7 @@ Before writing patterns, run a probe to confirm how owlready2 distinguishes qual
 ```bash
 python -c "
 import pymos, owlready2 as o
-onto = pymos.parse('Prefix: : <http://ex.org/>\nObjectProperty: p\nClass: C')
+onto = pymos.parse('Prefix: : <http://ex.org/>\nOntology: <http://ex.org/>\nObjectProperty: p\nClass: C')
 e_q = pymos.parse_expression('p exactly 2 C', onto)
 e_u = pymos.parse_expression('p min 1', onto)
 print('qualified:', e_q.type, e_q.cardinality, 'value=', e_q.value)
@@ -455,6 +461,7 @@ Append to `tests/test_pattern.py`:
 def test_intersection_two_named():
     onto = pymos.parse("""
         Prefix: : <http://ex.org/>
+        Ontology: <http://ex.org/>
         Class: A
         Class: B
     """)
@@ -472,6 +479,7 @@ def test_intersection_two_named():
 def test_intersection_named_and_anonymous():
     onto = pymos.parse("""
         Prefix: : <http://ex.org/>
+        Ontology: <http://ex.org/>
         ObjectProperty: treats
         Class: Drug
         Class: Disease
@@ -573,6 +581,7 @@ Append to `tests/test_pattern.py`:
 def test_union_two_named():
     onto = pymos.parse("""
         Prefix: : <http://ex.org/>
+        Ontology: <http://ex.org/>
         Class: A
         Class: B
     """)
@@ -635,6 +644,7 @@ Append to `tests/test_pattern.py`:
 def test_complement_named():
     onto = pymos.parse("""
         Prefix: : <http://ex.org/>
+        Ontology: <http://ex.org/>
         Class: A
     """)
     expr = pymos.parse_expression("not A", onto)
@@ -649,6 +659,7 @@ def test_complement_named():
 def test_complement_anonymous():
     onto = pymos.parse("""
         Prefix: : <http://ex.org/>
+        Ontology: <http://ex.org/>
         ObjectProperty: treats
         Class: Drug
     """)
@@ -713,6 +724,7 @@ Append to `tests/test_pattern.py`:
 def test_one_of():
     onto = pymos.parse("""
         Prefix: : <http://ex.org/>
+        Ontology: <http://ex.org/>
         Class: Cheese
         Class: Tomato
         Individual: a Types: Cheese
@@ -778,7 +790,7 @@ First confirm owlready2's exact serialisation:
 ```bash
 python -c "
 import pymos
-onto = pymos.parse('Prefix: : <http://ex.org/>\nObjectProperty: hasPart\nClass: A\nClass: B EquivalentTo: inverse hasPart some A')
+onto = pymos.parse('Prefix: : <http://ex.org/>\nOntology: <http://ex.org/>\nObjectProperty: hasPart\nClass: A\nClass: B EquivalentTo: inverse hasPart some A')
 print(onto.world.as_rdflib_graph().serialize(format='turtle'))
 "
 ```
@@ -791,6 +803,7 @@ Append to `tests/test_pattern.py`:
 def test_inverse_property_some():
     onto = pymos.parse("""
         Prefix: : <http://ex.org/>
+        Ontology: <http://ex.org/>
         ObjectProperty: hasPart
         Class: A
     """)
@@ -876,7 +889,7 @@ def test_target_term_named_string():
 
 
 def test_target_term_owlready_entity():
-    onto = pymos.parse("Prefix: : <http://ex.org/>\nClass: Pizza")
+    onto = pymos.parse("Prefix: : <http://ex.org/>\nOntology: <http://ex.org/>\nClass: Pizza")
     pizza = onto.world["http://ex.org/Pizza"]
     var, extra = _target_term(pizza)
     assert var == "<http://ex.org/Pizza>"
@@ -886,6 +899,7 @@ def test_target_term_owlready_entity():
 def test_target_term_anonymous_construct():
     onto = pymos.parse("""
         Prefix: : <http://ex.org/>
+        Ontology: <http://ex.org/>
         ObjectProperty: treats
         Class: Drug
     """)
@@ -899,6 +913,7 @@ def test_target_term_anonymous_construct():
 def test_anonymous_target_query_builds_and_parses():
     onto = pymos.parse("""
         Prefix: : <http://ex.org/>
+        Ontology: <http://ex.org/>
         ObjectProperty: treats
         Class: Drug
         Class: Disease
@@ -1133,6 +1148,7 @@ def test_unsupported_construct_raises_value_error():
 def test_has_value_with_literal_raises():
     onto = pymos.parse("""
         Prefix: : <http://ex.org/>
+        Ontology: <http://ex.org/>
         DataProperty: age
     """)
     expr = pymos.parse_expression("age value 42", onto)
@@ -1156,7 +1172,7 @@ If the tests still fail, check whether `pymos.parse_expression("age value 42", .
 ```bash
 python -c "
 import pymos
-onto = pymos.parse('Prefix: : <http://ex.org/>\nDataProperty: age')
+onto = pymos.parse('Prefix: : <http://ex.org/>\nOntology: <http://ex.org/>\nDataProperty: age')
 e = pymos.parse_expression('age value 42', onto)
 print(type(e), 'value=', repr(e.value), 'value has iri?', hasattr(e.value, 'iri'))
 "
