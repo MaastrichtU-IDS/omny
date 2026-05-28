@@ -3,7 +3,7 @@ FROM python:3.12-slim
 # System deps: git is needed by some owlready2 paths; build-essential is a safety
 # net for any wheel that lacks a manylinux build.
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends git build-essential \
+    && apt-get install -y --no-install-recommends git build-essential default-jre-headless \
     && rm -rf /var/lib/apt/lists/*
 
 # JupyterLab + jupytext + an HTTP client for the remote-endpoint notebook.
