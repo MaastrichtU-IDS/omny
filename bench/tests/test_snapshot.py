@@ -32,3 +32,39 @@ def test_snapshot_pizza_no_reasoner_pyoxigraph_only(tmp_path, monkeypatch):
     assert qc["backend"] == "pyoxigraph_mem"
     assert qc["reasoner"] == "none"
     assert "wall_cold" in qc["measurement"]
+
+
+from bench.runners.plots import write_scaling_plots
+
+
+def test_write_scaling_plots_produces_png(tmp_path):
+    results_json = tmp_path / "results.json"
+    results_json.write_text(json.dumps({
+        "env": {},
+        "cells": [
+            {"ontology": "pizza", "workload": "parse", "backend": None,
+             "reasoner": "none", "relation": None, "construct": None, "target": None,
+             "measurement": {"wall_cold": 0.1, "wall_hot_median": 0.08,
+                             "wall_hot_samples": [0.08, 0.08, 0.08],
+                             "wall_hot_stddev": 0.0, "peak_rss_bytes": 50_000_000,
+                             "peak_python_bytes": 1_000_000, "cpu_cold": 0.09,
+                             "cpu_hot_median": 0.07,
+                             "extras": {"axiom_count": 250, "bytes": 5000}},
+             "error": None, "skipped_reason": None},
+            {"ontology": "wine", "workload": "parse", "backend": None,
+             "reasoner": "none", "relation": None, "construct": None, "target": None,
+             "measurement": {"wall_cold": 0.25, "wall_hot_median": 0.2,
+                             "wall_hot_samples": [0.2, 0.2, 0.2],
+                             "wall_hot_stddev": 0.0, "peak_rss_bytes": 80_000_000,
+                             "peak_python_bytes": 2_000_000, "cpu_cold": 0.22,
+                             "cpu_hot_median": 0.18,
+                             "extras": {"axiom_count": 700, "bytes": 14000}},
+             "error": None, "skipped_reason": None},
+        ],
+    }))
+
+    out_dir = tmp_path / "plots"
+    write_scaling_plots(results_json, out_dir)
+    parse_png = out_dir / "parse_scaling.png"
+    assert parse_png.exists()
+    assert parse_png.stat().st_size > 0
