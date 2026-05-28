@@ -261,3 +261,25 @@ def test_one_of():
         "?t1 rdf:first <http://ex.org/a> ; rdf:rest ?t2 . "
         "?t2 rdf:first <http://ex.org/b> ; rdf:rest rdf:nil ."
     )
+
+
+import pytest
+
+
+def test_unsupported_construct_raises_value_error():
+    # ConstrainedDatatype is deferred per the design spec — must raise ValueError.
+    import owlready2
+    cd = owlready2.ConstrainedDatatype(int, min_inclusive=0, max_inclusive=10)
+    with pytest.raises(ValueError, match="not supported"):
+        expression_to_pattern(cd)
+
+
+def test_has_value_with_literal_raises():
+    onto = pymos.parse("""
+        Prefix: : <http://ex.org/>
+        Ontology: <http://ex.org/>
+        DataProperty: age
+    """)
+    expr = pymos.parse_expression("age value 42", onto)
+    with pytest.raises(ValueError, match="literal"):
+        expression_to_pattern(expr)
