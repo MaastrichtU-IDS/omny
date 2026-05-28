@@ -1,0 +1,318 @@
+"""Tests for owlready2 -> Manchester rendering (Milestone 5)."""
+import owlready2
+
+from pymos import parse_expression
+from pymos.render import render_expression
+
+
+def _rt(expr, onto, prefixes=None):
+    """Parse then render; useful for asserting output shape."""
+    ce = parse_expression(expr, onto, prefixes=prefixes)
+    return render_expression(ce, prefixes=prefixes)
+
+
+# ---- Task 19: expression renderer --------------------------------------------
+
+def test_render_named_class_full_iri(onto):
+    assert _rt("Pizza", onto) == "<http://pymos.test/onto.owl#Pizza>"
+
+
+def test_render_named_class_with_prefix(onto):
+    prefixes = {"": "http://pymos.test/onto.owl#"}
+    assert _rt("Pizza", onto, prefixes) == ":Pizza"
+
+
+def test_render_some(onto):
+    assert _rt("hasTopping some Cheese", onto) == (
+        "<http://pymos.test/onto.owl#hasTopping> some "
+        "<http://pymos.test/onto.owl#Cheese>"
+    )
+
+
+def test_render_only(onto):
+    assert " only " in _rt("hasTopping only Cheese", onto)
+
+
+def test_render_intersection(onto):
+    out = _rt("A and B", onto)
+    assert " and " in out
+    assert out.count("<http://pymos.test/onto.owl#") == 2
+
+
+def test_render_union(onto):
+    out = _rt("A or B", onto)
+    assert " or " in out
+
+
+def test_render_precedence_parens(onto):
+    # 'or' is lower precedence than 'and'; the (B or C) must be parenthesised
+    out = _rt("A and (B or C)", onto)
+    assert "and (" in out and " or " in out
+
+
+def test_render_not(onto):
+    out = _rt("not A", onto)
+    assert out.startswith("not ")
+
+
+def test_render_min_cardinality(onto):
+    out = _rt("hasTopping min 2 Cheese", onto)
+    assert " min 2 " in out
+
+
+def test_render_max_cardinality(onto):
+    out = _rt("hasTopping max 3 Cheese", onto)
+    assert " max 3 " in out
+
+
+def test_render_exactly_cardinality(onto):
+    out = _rt("hasTopping exactly 1 Cheese", onto)
+    assert " exactly 1 " in out
+
+
+def test_render_value(onto):
+    out = _rt("hasTopping value myCheese", onto)
+    assert " value " in out
+
+
+def test_render_self(onto):
+    out = _rt("likes Self", onto)
+    assert out.endswith(" Self")
+
+
+def test_render_one_of(onto):
+    out = _rt("{ a , b , c }", onto)
+    assert out.startswith("{") and out.endswith("}")
+    assert out.count(",") == 2
+
+
+def test_render_inverse(onto):
+    out = _rt("inverse hasTopping some Pizza", onto)
+    assert out.startswith("inverse ")
+
+
+# ---- Task 20: frame renderers ------------------------------------------------
+
+from pymos import parse
+from pymos.render import render_frame
+
+
+def test_render_class_frame_subclass_equivalent_disjoint():
+    doc = """
+    Prefix: : <http://ex.org/>
+    Class: Margherita
+        SubClassOf: Pizza, hasTopping some Cheese
+        EquivalentTo: hasTopping only Cheese
+        DisjointWith: IceCream
+    """
+    o = parse(doc)
+    m = o.world["http://ex.org/Margherita"]
+    out = render_frame(m, prefixes={"": "http://ex.org/"})
+    assert out.startswith("Class: :Margherita")
+    assert "SubClassOf:" in out
+    assert ":Pizza" in out
+    assert "some" in out
+    assert "EquivalentTo:" in out and "only" in out
+    assert "DisjointWith:" in out and ":IceCream" in out
+
+
+def test_render_class_frame_filters_thing_from_superclasses():
+    """owlready2 puts owl:Thing in is_a; renderer must skip it."""
+    doc = """
+    Prefix: : <http://ex.org/>
+    Class: Cheese
+    """
+    o = parse(doc)
+    c = o.world["http://ex.org/Cheese"]
+    out = render_frame(c, prefixes={"": "http://ex.org/"})
+    assert out.strip() == "Class: :Cheese"
+    assert "Thing" not in out
+
+
+def test_render_object_property_frame():
+    doc = """
+    Prefix: : <http://ex.org/>
+    ObjectProperty: hasTopping
+        Domain: Pizza
+        Range: Topping
+        Characteristics: Transitive, Functional
+        InverseOf: isToppingOf
+    """
+    o = parse(doc)
+    p = o.world["http://ex.org/hasTopping"]
+    out = render_frame(p, prefixes={"": "http://ex.org/"})
+    assert out.startswith("ObjectProperty: :hasTopping")
+    assert "Domain: :Pizza" in out
+    assert "Range: :Topping" in out
+    assert "Characteristics:" in out
+    assert "Transitive" in out and "Functional" in out
+    assert "InverseOf: :isToppingOf" in out
+
+
+def test_render_data_property_frame():
+    doc = """
+    Prefix: : <http://ex.org/>
+    Prefix: xsd: <http://www.w3.org/2001/XMLSchema#>
+    DataProperty: hasName
+        Domain: Person
+        Range: xsd:string
+        Characteristics: Functional
+    """
+    o = parse(doc)
+    p = o.world["http://ex.org/hasName"]
+    out = render_frame(p, prefixes={
+        "": "http://ex.org/",
+        "xsd": "http://www.w3.org/2001/XMLSchema#",
+    })
+    assert out.startswith("DataProperty: :hasName")
+    assert "Domain: :Person" in out
+    assert "Range: xsd:string" in out
+    assert "Characteristics: Functional" in out
+
+
+def test_render_individual_frame():
+    doc = """
+    Prefix: : <http://ex.org/>
+    Individual: bob
+        Types: Person
+    """
+    o = parse(doc)
+    b = o.world["http://ex.org/bob"]
+    out = render_frame(b, prefixes={"": "http://ex.org/"})
+    assert out.startswith("Individual: :bob")
+    assert "Types: :Person" in out
+
+
+def test_render_frame_drops_empty_axiom_lines():
+    """A class with no axioms produces just the header — no empty SubClassOf:."""
+    doc = """
+    Prefix: : <http://ex.org/>
+    Class: Cheese
+    """
+    o = parse(doc)
+    out = render_frame(o.world["http://ex.org/Cheese"], prefixes={"": "http://ex.org/"})
+    assert "SubClassOf:" not in out
+    assert "EquivalentTo:" not in out
+    assert "DisjointWith:" not in out
+
+
+# ---- Task 21: document renderer + round-trip --------------------------------
+
+from pymos.render import render
+
+# Fixture covering exactly what render currently supports: Prefix/Ontology header,
+# Class frames (SubClassOf/EquivalentTo/DisjointWith), Object/DataProperty frames
+# (Domain/Range/Characteristics/InverseOf), Individual frames (Types).
+# Annotations / Facts / SameAs / DifferentFrom / AnnotationProperty / Datatype
+# rendering is a follow-up (see render.py TODO).
+_ROUND_TRIP_DOC = """\
+Prefix: : <http://ex.org/>
+Prefix: xsd: <http://www.w3.org/2001/XMLSchema#>
+
+Ontology: <http://ex.org/pymos-rt.owl>
+
+Class: Food
+Class: Topping
+Class: Cheese
+    SubClassOf: Topping
+Class: Tomato
+    SubClassOf: Topping
+Class: Pizza
+    SubClassOf: Food
+Class: Margherita
+    SubClassOf: Pizza, hasTopping some Cheese
+    EquivalentTo: hasTopping only (Cheese or Tomato)
+    DisjointWith: IceCream
+Class: IceCream
+
+ObjectProperty: hasTopping
+    Domain: Pizza
+    Range: Topping
+    Characteristics: Transitive
+ObjectProperty: isToppingOf
+    InverseOf: hasTopping
+
+DataProperty: hasCalories
+    Domain: Pizza
+    Range: xsd:integer
+
+Individual: margherita1
+    Types: Margherita
+Individual: iceCream1
+    Types: IceCream
+"""
+
+_RT_PREFIXES = {"": "http://ex.org/", "xsd": "http://www.w3.org/2001/XMLSchema#"}
+
+
+def test_render_document_emits_header_and_frames():
+    o = parse(_ROUND_TRIP_DOC)
+    text = render(o, prefixes=_RT_PREFIXES)
+    assert "Prefix: : <http://ex.org/>" in text
+    assert "Ontology: <http://ex.org/pymos-rt.owl>" in text
+    assert "Class: :Margherita" in text
+    assert "ObjectProperty: :hasTopping" in text
+    assert "DataProperty: :hasCalories" in text
+    assert "Individual: :margherita1" in text
+
+
+def test_render_document_round_trips_structurally():
+    onto1 = parse(_ROUND_TRIP_DOC)
+    text = render(onto1, prefixes=_RT_PREFIXES)
+    onto2 = parse(text)
+
+    iris1 = {c.iri for c in onto1.classes()}
+    iris2 = {c.iri for c in onto2.classes()}
+    assert iris1 == iris2
+
+    for iri in iris1:
+        c1, c2 = onto1.world[iri], onto2.world[iri]
+        supers1 = [s for s in c1.is_a if s is not owlready2.Thing]
+        supers2 = [s for s in c2.is_a if s is not owlready2.Thing]
+        assert len(supers1) == len(supers2), f"is_a mismatch for {iri}"
+        assert len(c1.equivalent_to) == len(c2.equivalent_to), f"equiv mismatch for {iri}"
+
+    op1 = {p.iri for p in onto1.object_properties()}
+    op2 = {p.iri for p in onto2.object_properties()}
+    assert op1 == op2
+
+    ind1 = {i.iri for i in onto1.individuals()}
+    ind2 = {i.iri for i in onto2.individuals()}
+    assert ind1 == ind2
+
+
+def test_render_document_idempotent_on_second_pass():
+    text1 = render(parse(_ROUND_TRIP_DOC), prefixes=_RT_PREFIXES)
+    text2 = render(parse(text1), prefixes=_RT_PREFIXES)
+    assert text1 == text2  # second pass is stable
+
+
+# ---- Task 22: edge cases -----------------------------------------------------
+
+def test_render_constrained_datatype(onto):
+    out = _rt(
+        "hasAge some xsd:integer[>= 18]",
+        onto,
+        prefixes={"xsd": "http://www.w3.org/2001/XMLSchema#"},
+    )
+    assert "xsd:integer" in out
+    assert ">= 18" in out
+    assert "[" in out and "]" in out
+
+
+def test_render_nested_precedence_or_under_and(onto):
+    # (A or B) and not C → the 'or' operand must be parenthesised
+    out = _rt("(A or B) and not C", onto)
+    assert " and " in out
+    assert " or " in out
+    assert "not " in out
+    # Find 'and' and check that the operand to its left starts with '(' (the or-subexpr)
+    pre_and = out.split(" and ")[0].strip()
+    assert pre_and.startswith("(") and pre_and.endswith(")"), (
+        f"expected 'or' operand to be parenthesised, got: {pre_and!r}"
+    )
+
+
+def test_render_double_negation(onto):
+    out = _rt("not (not A)", onto)
+    assert out.count("not ") == 2
