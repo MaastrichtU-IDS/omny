@@ -54,16 +54,22 @@ def _mos_magic(line: str, cell: str) -> None:
 def _reason_magic(line: str) -> None:
     """%reason — run HermiT (owlready2.sync_reasoner) over the active world.
 
-    Use ``%reason pellet`` to invoke Pellet instead (owlready2 also ships
-    ``sync_reasoner_pellet``).
+    Use ``%reason pellet`` to invoke Pellet instead. Pellet is not bundled with
+    owlready2 — you must install it separately and ensure ``pellet`` is on
+    PATH (or owlready2 can find it).  If it isn't, a friendly message prints.
     """
     if not list(_state.onto.classes()):
         print("no ontology axioms yet — start with a %%mos cell")
         return
     arg = (line or "").strip().lower()
     runner = owlready2.sync_reasoner_pellet if arg == "pellet" else owlready2.sync_reasoner
-    with _state.onto:
-        runner(_state.world)
+    try:
+        with _state.onto:
+            runner(_state.world)
+    except (FileNotFoundError, OSError) as e:
+        which = "Pellet" if arg == "pellet" else "HermiT"
+        print(f"{which} reasoner not available: {e}. "
+              f"For Pellet, install it separately and put it on PATH.")
 
 
 def _mos_query_magic(line: str, cell: str) -> None:

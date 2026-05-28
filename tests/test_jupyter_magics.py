@@ -168,6 +168,56 @@ def test_completer_returns_none_outside_mos_cells():
     assert cands is None
 
 
+def test_reason_with_no_axioms_prints_friendly_message(capsys):
+    ip = _ip()
+    # No %%mos cell — ontology is empty.
+    ip.run_line_magic("reason", "")
+    out = capsys.readouterr().out
+    assert "no ontology axioms" in out.lower()
+
+
+def test_mos_query_unknown_relation_lists_valid(capsys):
+    ip = _ip()
+    ip.run_cell_magic("mos", "", "Class: Pizza")
+    ip.run_cell_magic("mos_query", "bogus_relation", "Pizza")
+    out = capsys.readouterr().out
+    assert "bogus_relation" in out
+    assert "super" in out  # one of the valid relations listed
+    assert "sub" in out
+    assert "equiv" in out
+
+
+def test_register_completer_adapter_forwards_to_mos_complete():
+    """Verify the IPython adapter glue translates event objects correctly."""
+    from types import SimpleNamespace
+    from pymos.jupyter import _register_completer, _state
+    # Reset state then add a class so dynamic candidates are non-empty.
+    ip = _ip()
+    ip.run_cell_magic("mos", "", "Class: Pizza")
+    # Capture the adapter callable via set_custom_completer.
+    captured_adapter = []
+    orig = ip.set_custom_completer
+
+    def _capture(fn, *args, **kwargs):
+        captured_adapter.append(fn)
+        return orig(fn, *args, **kwargs)
+
+    ip.set_custom_completer = _capture
+    try:
+        _register_completer(ip)
+    finally:
+        ip.set_custom_completer = orig
+    assert captured_adapter, "_register_completer should call set_custom_completer"
+    adapter = captured_adapter[-1]
+    event = SimpleNamespace(
+        text_until_cursor="%%mos\nClass: Margherita\n    SubClassOf: P",
+        line="    SubClassOf: P",
+        symbol="P",
+    )
+    result = adapter(ip, event)
+    assert "Pizza" in result, f"expected Pizza in adapter result, got {result}"
+
+
 def test_load_extension_emits_codemirror_js(capsys):
     """The injected JS payload must mention the Manchester keywords; if it doesn't,
     highlighting is silently lost. Behavioral check happens in the docker smoke test.
