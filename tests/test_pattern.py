@@ -188,3 +188,37 @@ def test_union_two_named():
         "?t1 rdf:first <http://ex.org/A> ; rdf:rest ?t2 . "
         "?t2 rdf:first <http://ex.org/B> ; rdf:rest rdf:nil ."
     )
+
+
+def test_complement_named():
+    onto = pymos.parse("""
+        Prefix: : <http://ex.org/>
+        Ontology: <http://ex.org/>
+        Class: A
+    """)
+    expr = pymos.parse_expression("not A", onto)
+    var, pattern = expression_to_pattern(expr)
+    assert var == "?t0"
+    assert _norm(pattern) == _norm(
+        "?t0 a owl:Class ; "
+        "owl:complementOf <http://ex.org/A> ."
+    )
+
+
+def test_complement_anonymous():
+    onto = pymos.parse("""
+        Prefix: : <http://ex.org/>
+        Ontology: <http://ex.org/>
+        ObjectProperty: treats
+        Class: Drug
+    """)
+    expr = pymos.parse_expression("not (treats some Drug)", onto)
+    var, pattern = expression_to_pattern(expr)
+    assert var == "?t0"
+    assert _norm(pattern) == _norm(
+        "?t0 a owl:Class ; "
+        "owl:complementOf ?t1 . "
+        "?t1 a owl:Restriction ; "
+        "owl:onProperty <http://ex.org/treats> ; "
+        "owl:someValuesFrom <http://ex.org/Drug> ."
+    )

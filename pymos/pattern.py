@@ -47,6 +47,13 @@ class _Walker:
                 f"owl:unionOf {list_head} . "
                 f"{list_triples}"
             )
+        if isinstance(expr, owlready2.Not):
+            var = self.fresh()
+            operand_term, extra = self.operand(expr.Class)
+            return var, (
+                f"{var} a owl:Class ; "
+                f"owl:complementOf {operand_term} . {extra}"
+            )
         raise ValueError(
             f"anonymous target of type {type(expr).__name__} is not supported"
         )
