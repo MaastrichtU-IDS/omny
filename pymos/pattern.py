@@ -39,6 +39,14 @@ class _Walker:
                 f"owl:intersectionOf {list_head} . "
                 f"{list_triples}"
             )
+        if isinstance(expr, owlready2.Or):
+            var = self.fresh()
+            list_head, list_triples = self._list_pattern(expr.Classes)
+            return var, (
+                f"{var} a owl:Class ; "
+                f"owl:unionOf {list_head} . "
+                f"{list_triples}"
+            )
         raise ValueError(
             f"anonymous target of type {type(expr).__name__} is not supported"
         )
