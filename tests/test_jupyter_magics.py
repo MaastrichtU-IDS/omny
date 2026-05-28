@@ -126,3 +126,43 @@ def test_mos_save_writes_file(tmp_path):
     onto2 = pymos.parse(text)
     names = {c.name for c in onto2.classes()}
     assert {"Pizza", "Cheese"} <= names
+
+
+def test_completer_offers_frame_keywords_at_line_start():
+    ip = _ip()
+    ip.run_cell_magic("mos", "", "Class: Pizza")
+    # The completer is exported as `_mos_complete(cell_text, line, cursor_col)`
+    # for testability — IPython invokes it through set_custom_completer.
+    from pymos.jupyter import _mos_complete
+    cands = _mos_complete(cell_text="%%mos\nC", line="C", cursor_col=1)
+    assert "Class:" in cands
+
+
+def test_completer_offers_known_class_after_subclassof():
+    ip = _ip()
+    ip.run_cell_magic("mos", "", "Class: Pizza\nClass: Cheese")
+    from pymos.jupyter import _mos_complete
+    cell = "%%mos\nClass: Margherita\n    SubClassOf: P"
+    line = "    SubClassOf: P"
+    cands = _mos_complete(cell_text=cell, line=line, cursor_col=len(line))
+    assert "Pizza" in cands
+
+
+def test_completer_offers_restriction_operators_after_property():
+    ip = _ip()
+    ip.run_cell_magic("mos", "",
+                     "ObjectProperty: hasTopping\nClass: Pizza\nClass: Cheese")
+    from pymos.jupyter import _mos_complete
+    cell = "%%mos_query equiv\nPizza and (hasTopping s"
+    line = "Pizza and (hasTopping s"
+    cands = _mos_complete(cell_text=cell, line=line, cursor_col=len(line))
+    assert "some" in cands
+
+
+def test_completer_returns_none_outside_mos_cells():
+    ip = _ip()
+    from pymos.jupyter import _mos_complete
+    # No %%mos magic on the first line → completer should yield None
+    # so the default Python completer runs instead.
+    cands = _mos_complete(cell_text="x = 1\nCl", line="Cl", cursor_col=2)
+    assert cands is None

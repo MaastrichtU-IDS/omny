@@ -17,6 +17,8 @@ user namespace as ``mos_onto`` and ``mos_world``; ``mos_reset()`` clears it.
 """
 from __future__ import annotations
 
+import re
+
 import owlready2
 
 import pymos
@@ -134,6 +136,134 @@ def _mos_save_magic(line: str) -> None:
     print(f"wrote {path}")
 
 
+_FRAME_KEYWORDS = [
+    "Class:", "ObjectProperty:", "DataProperty:", "Individual:",
+    "Datatype:", "AnnotationProperty:", "Ontology:", "Prefix:", "Import:",
+]
+_VALUE_KEYWORDS = {
+    "SubClassOf:", "EquivalentTo:", "DisjointWith:",
+    "Domain:", "Range:", "SubPropertyOf:",
+    "Types:", "SameAs:", "DifferentFrom:", "Facts:",
+    "Characteristics:",
+}
+_RESTRICTION_OPS = ["some", "only", "value", "min", "max", "exactly", "Self"]
+_BOOL_OPS = ["and", "or", "not", "inverse"]
+_CHAR_KEYWORDS = [
+    "Functional", "InverseFunctional", "Transitive",
+    "Symmetric", "Asymmetric", "Reflexive", "Irreflexive",
+]
+
+
+def _last_value_keyword(cell_text: str, up_to_line_index: int) -> str | None:
+    """Return the most recent value-keyword (e.g. SubClassOf:) within the current frame."""
+    lines = cell_text.splitlines()[:up_to_line_index + 1]
+    for raw in reversed(lines):
+        s = raw.strip()
+        # Stop scanning at a frame boundary.
+        if any(s.startswith(k) for k in _FRAME_KEYWORDS):
+            break
+        for k in _VALUE_KEYWORDS:
+            if s.startswith(k):
+                return k
+    return None
+
+
+def _last_frame_keyword(cell_text: str, up_to_line_index: int) -> str | None:
+    """Return the most recent frame-keyword (Class:, ObjectProperty:, …)."""
+    lines = cell_text.splitlines()[:up_to_line_index + 1]
+    for raw in reversed(lines):
+        s = raw.strip()
+        for k in _FRAME_KEYWORDS:
+            if s.startswith(k):
+                return k
+    return None
+
+
+def _is_mos_cell(cell_text: str) -> bool:
+    """True iff the cell's first line is a %%mos or %%mos_query magic."""
+    first = (cell_text.splitlines() + [""])[0].strip()
+    return first.startswith("%%mos") or first.startswith("%%mos_query")
+
+
+def _candidate_pool(context: str) -> list[str]:
+    """Return raw candidates appropriate for the given context label."""
+    if context == "line_start":
+        return list(_FRAME_KEYWORDS)
+    if context == "class":
+        return [c.name for c in _state.onto.classes()] + _BOOL_OPS + ["("]
+    if context == "object_property_or_class":
+        return ([c.name for c in _state.onto.classes()]
+                + [p.name for p in _state.onto.object_properties()]
+                + _BOOL_OPS + _RESTRICTION_OPS)
+    if context == "individual":
+        return [i.name for i in _state.onto.individuals()]
+    if context == "characteristic":
+        return list(_CHAR_KEYWORDS)
+    if context == "restriction_op":
+        return list(_RESTRICTION_OPS)
+    return []
+
+
+def _classify_context(cell_text: str, line: str, cursor_col: int) -> str:
+    """Decide which candidate pool applies at the cursor."""
+    lines = cell_text.splitlines()
+    line_idx = max(0, len(lines) - 1)
+    head = line[:cursor_col]
+    stripped_head = head.lstrip()
+    column_after_indent = len(head) - len(stripped_head)
+    last_value = _last_value_keyword(cell_text, line_idx)
+    last_frame = _last_frame_keyword(cell_text, line_idx)
+    if column_after_indent == cursor_col and last_value is None:
+        return "line_start"
+    if last_value in {"SubClassOf:", "EquivalentTo:", "DisjointWith:"}:
+        return "object_property_or_class"
+    if last_value in {"Domain:", "Range:"}:
+        return "class"
+    if last_value in {"Types:", "SameAs:", "DifferentFrom:"}:
+        return "individual"
+    if last_value == "Characteristics:":
+        return "characteristic"
+    if last_frame in {"Class:", "ObjectProperty:", "DataProperty:", "Individual:"}:
+        return "line_start"
+    # %%mos_query cells contain a single class expression — default to operators/classes/properties.
+    first = (cell_text.splitlines() + [""])[0].strip()
+    if first.startswith("%%mos_query"):
+        return "object_property_or_class"
+    return "line_start"
+
+
+def _mos_complete(cell_text: str, line: str, cursor_col: int) -> list[str] | None:
+    """Return Tab candidates for an MOS cell, or ``None`` to fall through to Python."""
+    if not _is_mos_cell(cell_text):
+        return None
+    context = _classify_context(cell_text, line, cursor_col)
+    pool = _candidate_pool(context)
+    head = line[:cursor_col]
+    m = re.search(r"([A-Za-z_:][\w:]*)$", head)
+    partial = m.group(1) if m else ""
+    if not partial:
+        return sorted(set(pool))
+    return sorted({c for c in pool if c.startswith(partial)})
+
+
+def _register_completer(ip) -> None:
+    """Register the completer with IPython.
+
+    IPython's ``set_custom_completer`` receives a callable that takes the shell
+    and an event and returns a list of completions.  We adapt our pure helper
+    ``_mos_complete`` to that interface.
+    """
+
+    def _adapter(_shell, event):
+        cell_text = getattr(event, "text_until_cursor", None) or event.line
+        line = event.line or ""
+        cursor_col = len(line)
+        cands = _mos_complete(cell_text, line, cursor_col)
+        return cands if cands is not None else []
+
+    ip.set_custom_completer(_adapter)
+
+
 def load_ipython_extension(ip) -> None:
     """Called by IPython when ``%load_ext pymos.jupyter`` runs."""
     ip.register_magic_function(_mos_magic, magic_kind="cell", magic_name="mos")
@@ -144,6 +274,7 @@ def load_ipython_extension(ip) -> None:
     ip.user_ns["mos_onto"] = _state.onto
     ip.user_ns["mos_world"] = _state.world
     ip.user_ns["mos_reset"] = _reset_for_user_ns(ip)
+    _register_completer(ip)
 
 
 def _reset_for_user_ns(ip):
