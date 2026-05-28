@@ -122,12 +122,19 @@ Create `tests/test_jupyter_magics.py`:
 Uses IPython.testing.globalipapp to obtain a real (singleton) InteractiveShell,
 loads the extension, and exercises each magic. No notebook server is needed.
 """
-from IPython.testing.globalipapp import get_ipython
+import IPython
+from IPython.testing.globalipapp import get_ipython as _bootstrap_ipython
 
 
 def _ip():
-    """Fresh-ish IPython shell with the extension loaded; resets pymos state."""
-    ip = get_ipython()
+    """Fresh-ish IPython shell with the extension loaded; resets pymos state.
+
+    ``globalipapp.get_ipython()`` is a one-shot installer: it returns the
+    singleton on the first call only. Subsequent calls return ``None`` and the
+    same singleton must be retrieved via ``IPython.get_ipython()`` — which the
+    installer registered globally during its first invocation.
+    """
+    ip = _bootstrap_ipython() or IPython.get_ipython()
     if "pymos.jupyter" in ip.extension_manager.loaded:
         ip.extension_manager.reload_extension("pymos.jupyter")
     else:
