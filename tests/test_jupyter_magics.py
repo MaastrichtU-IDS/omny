@@ -84,3 +84,45 @@ def test_mos_query_equiv_finds_named_class(capsys):
     ip.run_cell_magic("mos_query", "equiv", "Pizza and (hasTopping some Cheese)")
     out = capsys.readouterr().out
     assert "http://pymos.test/notebook#Margherita" in out
+
+
+def test_mos_show_renders_one_class(capsys):
+    ip = _ip()
+    ip.run_cell_magic("mos", "", (
+        "ObjectProperty: hasTopping\n"
+        "Class: Pizza\n"
+        "Class: Cheese\n"
+        "Class: Margherita\n"
+        "    SubClassOf: Pizza\n"
+        "    EquivalentTo: Pizza and (hasTopping some Cheese)\n"
+    ))
+    ip.run_line_magic("mos_show", "Margherita")
+    out = capsys.readouterr().out
+    assert "Class:" in out
+    assert "Margherita" in out
+    assert "SubClassOf" in out
+    assert "EquivalentTo" in out
+
+
+def test_mos_show_unknown_lists_known(capsys):
+    ip = _ip()
+    ip.run_cell_magic("mos", "", "Class: Pizza\nClass: Cheese")
+    ip.run_line_magic("mos_show", "Banana")
+    out = capsys.readouterr().out
+    assert "Banana" in out
+    assert "Pizza" in out  # listed in suggestions
+    assert "Cheese" in out
+
+
+def test_mos_save_writes_file(tmp_path):
+    ip = _ip()
+    ip.run_cell_magic("mos", "", "Class: Pizza\nClass: Cheese")
+    target = tmp_path / "out.omn"
+    ip.run_line_magic("mos_save", str(target))
+    text = target.read_text()
+    assert "Class:" in text
+    # Round-trip: parsing the saved file recovers the classes.
+    import pymos
+    onto2 = pymos.parse(text)
+    names = {c.name for c in onto2.classes()}
+    assert {"Pizza", "Cheese"} <= names

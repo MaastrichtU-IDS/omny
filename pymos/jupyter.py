@@ -85,11 +85,62 @@ def _mos_query_magic(line: str, cell: str) -> None:
         print(str(r[0]))
 
 
+def _entity_by_local_name(name: str):
+    """Look up a named entity in the active ontology by its short local name."""
+    base = _state.onto.base_iri
+    base = base if base.endswith(("/", "#")) else base + "#"
+    return _state.onto.world[base + name]
+
+
+def _list_known_names() -> dict[str, list[str]]:
+    """Return a dict of {kind: sorted local names} for diagnostics."""
+    return {
+        "classes": sorted(c.name for c in _state.onto.classes()),
+        "object_properties": sorted(p.name for p in _state.onto.object_properties()),
+        "data_properties": sorted(p.name for p in _state.onto.data_properties()),
+        "individuals": sorted(i.name for i in _state.onto.individuals()),
+    }
+
+
+def _mos_show_magic(line: str) -> None:
+    """%mos_show <Name> — render one named entity's axioms back to Manchester."""
+    name = (line or "").strip()
+    if not name:
+        print("usage: %mos_show <LocalName>")
+        return
+    entity = _entity_by_local_name(name)
+    if entity is None:
+        print(f"unknown name '{name}'. known:")
+        for kind, names in _list_known_names().items():
+            if names:
+                print(f"  {kind}: {', '.join(names)}")
+        return
+    base = _state.onto.base_iri
+    prefixes = {"": base if base.endswith(("/", "#")) else base + "#"}
+    print(pymos.render_frame(entity, prefixes=prefixes))
+
+
+def _mos_save_magic(line: str) -> None:
+    """%mos_save <path> — render the active ontology to Manchester and write to <path>."""
+    path = (line or "").strip()
+    if not path:
+        print("usage: %mos_save <path>")
+        return
+    base = _state.onto.base_iri
+    prefixes = {"": base if base.endswith(("/", "#")) else base + "#"}
+    text = pymos.render(_state.onto, prefixes=prefixes)
+    with open(path, "w") as f:
+        f.write(text)
+    print(f"wrote {path}")
+
+
 def load_ipython_extension(ip) -> None:
     """Called by IPython when ``%load_ext pymos.jupyter`` runs."""
     ip.register_magic_function(_mos_magic, magic_kind="cell", magic_name="mos")
     ip.register_magic_function(_reason_magic, magic_kind="line", magic_name="reason")
     ip.register_magic_function(_mos_query_magic, magic_kind="cell", magic_name="mos_query")
+    ip.register_magic_function(_mos_show_magic, magic_kind="line", magic_name="mos_show")
+    ip.register_magic_function(_mos_save_magic, magic_kind="line", magic_name="mos_save")
     ip.user_ns["mos_onto"] = _state.onto
     ip.user_ns["mos_world"] = _state.world
     ip.user_ns["mos_reset"] = _reset_for_user_ns(ip)
