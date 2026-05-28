@@ -67,3 +67,21 @@ def test_robot_reasoner_materialises_pizza(Reasoner, name, profile, pizza_text, 
     assert out.exists()
     assert out != p
     assert out.stat().st_size > 0
+
+
+from bench.reasoners.konclude import KoncludeReasoner
+
+
+@requires_docker
+def test_konclude_materialises_owx_input(pizza_text, tmp_path):
+    from bench.reasoners.robot_docker import RobotDocker
+    rd = RobotDocker()
+    omn = tmp_path / "pizza.omn"; omn.write_text(pizza_text)
+    owx = tmp_path / "pizza.owx"
+    rd._run(["convert", "--input", "pizza.omn", "--output", "pizza.owx"], mount=tmp_path)
+    assert owx.exists()
+
+    r = KoncludeReasoner()
+    out = r.materialise(owx)
+    assert out.exists()
+    assert r.profile == "DL"
