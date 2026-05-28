@@ -1,6 +1,8 @@
 import pytest
 import rdflib  # noqa: F401
-from pymos.sparql import _relation_clause, class_relations_query
+
+import pymos
+from pymos.sparql import _relation_clause, _target_term, class_relations_query
 
 
 def _norm(s):
@@ -61,10 +63,6 @@ def test_named_class_accepts_owlready_class(onto):
     pizza = parse_expression("Pizza", onto)
     q = class_relations_query(pizza, relations=("super",))
     assert "<http://pymos.test/onto.owl#Pizza>" in q
-
-
-import pymos
-from pymos.sparql import _target_term
 
 
 def test_target_term_named_string():

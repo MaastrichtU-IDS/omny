@@ -1,3 +1,5 @@
+import pytest
+
 import pymos
 from pymos.pattern import expression_to_pattern
 
@@ -261,9 +263,6 @@ def test_one_of():
         "?t1 rdf:first <http://ex.org/a> ; rdf:rest ?t2 . "
         "?t2 rdf:first <http://ex.org/b> ; rdf:rest rdf:nil ."
     )
-
-
-import pytest
 
 
 def test_unsupported_construct_raises_value_error():
