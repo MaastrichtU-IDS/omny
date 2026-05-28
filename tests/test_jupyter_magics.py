@@ -3,8 +3,14 @@
 Uses IPython.testing.globalipapp to obtain a real (singleton) InteractiveShell,
 loads the extension, and exercises each magic. No notebook server is needed.
 """
+import shutil
+
 import IPython
+import pytest
 from IPython.testing.globalipapp import get_ipython as _bootstrap_ipython
+
+
+_HAS_JAVA = shutil.which("java") is not None
 
 
 def _ip():
@@ -41,3 +47,26 @@ def test_mos_cell_merges_incrementally():
     onto = ip.user_ns["mos_onto"]
     names = {c.name for c in onto.classes()}
     assert {"Pizza", "Cheese"} <= names
+
+
+@pytest.mark.skipif(not _HAS_JAVA, reason="HermiT needs Java on PATH")
+def test_reason_materializes_inferred_subclass():
+    ip = _ip()
+    # Margherita ≡ Pizza ⊓ (hasTopping some Cheese) — HermiT should infer
+    # Margherita ⊑ Pizza (without it being asserted as a SubClassOf).
+    ip.run_cell_magic("mos", "", (
+        "ObjectProperty: hasTopping\n"
+        "Class: Pizza\n"
+        "Class: Cheese\n"
+        "Class: Margherita\n"
+        "    EquivalentTo: Pizza and (hasTopping some Cheese)\n"
+    ))
+    ip.run_line_magic("reason", "")
+    onto = ip.user_ns["mos_onto"]
+    pizza = onto.world["http://pymos.test/notebook#Pizza"]
+    margherita = onto.world["http://pymos.test/notebook#Margherita"]
+    # After reasoning, Margherita's transitive parents include Pizza.
+    parents = set(margherita.ancestors())
+    assert pizza in parents, (
+        f"expected Pizza in Margherita.ancestors() after %reason, got {parents}"
+    )

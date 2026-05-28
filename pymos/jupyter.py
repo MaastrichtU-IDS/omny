@@ -46,9 +46,25 @@ def _mos_magic(line: str, cell: str) -> None:
     pymos.parse(cell, onto=_state.onto)
 
 
+def _reason_magic(line: str) -> None:
+    """%reason — run HermiT (owlready2.sync_reasoner) over the active world.
+
+    Use ``%reason pellet`` to invoke Pellet instead (owlready2 also ships
+    ``sync_reasoner_pellet``).
+    """
+    if not list(_state.onto.classes()):
+        print("no ontology axioms yet — start with a %%mos cell")
+        return
+    arg = (line or "").strip().lower()
+    runner = owlready2.sync_reasoner_pellet if arg == "pellet" else owlready2.sync_reasoner
+    with _state.onto:
+        runner(_state.world)
+
+
 def load_ipython_extension(ip) -> None:
     """Called by IPython when ``%load_ext pymos.jupyter`` runs."""
     ip.register_magic_function(_mos_magic, magic_kind="cell", magic_name="mos")
+    ip.register_magic_function(_reason_magic, magic_kind="line", magic_name="reason")
     ip.user_ns["mos_onto"] = _state.onto
     ip.user_ns["mos_world"] = _state.world
     ip.user_ns["mos_reset"] = _reset_for_user_ns(ip)
