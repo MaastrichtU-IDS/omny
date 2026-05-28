@@ -285,3 +285,34 @@ def test_render_document_idempotent_on_second_pass():
     text1 = render(parse(_ROUND_TRIP_DOC), prefixes=_RT_PREFIXES)
     text2 = render(parse(text1), prefixes=_RT_PREFIXES)
     assert text1 == text2  # second pass is stable
+
+
+# ---- Task 22: edge cases -----------------------------------------------------
+
+def test_render_constrained_datatype(onto):
+    out = _rt(
+        "hasAge some xsd:integer[>= 18]",
+        onto,
+        prefixes={"xsd": "http://www.w3.org/2001/XMLSchema#"},
+    )
+    assert "xsd:integer" in out
+    assert ">= 18" in out
+    assert "[" in out and "]" in out
+
+
+def test_render_nested_precedence_or_under_and(onto):
+    # (A or B) and not C → the 'or' operand must be parenthesised
+    out = _rt("(A or B) and not C", onto)
+    assert " and " in out
+    assert " or " in out
+    assert "not " in out
+    # Find 'and' and check that the operand to its left starts with '(' (the or-subexpr)
+    pre_and = out.split(" and ")[0].strip()
+    assert pre_and.startswith("(") and pre_and.endswith(")"), (
+        f"expected 'or' operand to be parenthesised, got: {pre_and!r}"
+    )
+
+
+def test_render_double_negation(onto):
+    out = _rt("not (not A)", onto)
+    assert out.count("not ") == 2
