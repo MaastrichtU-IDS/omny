@@ -17,6 +17,15 @@ pyoxigraph = ["pyoxigraph>=0.4"]
 rdflib = ["rdflib>=7.0"]
 endpoint = ["SPARQLWrapper>=2.0"]
 dev = ["pytest>=8.0", "pyoxigraph>=0.4", "rdflib>=7.0", "ruff>=0.6"]
+bench = [
+  "psutil>=5.9",
+  "matplotlib>=3.8",
+  "owlrl>=6.0",
+  "rdflib>=7.0",
+  "pyoxigraph>=0.4",
+  "requests>=2.31",
+  "pytest>=8.0",
+]
 
 [tool.setuptools.packages.find]
 include = ["pymos*"]
