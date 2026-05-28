@@ -222,3 +222,23 @@ def test_complement_anonymous():
         "owl:onProperty <http://ex.org/treats> ; "
         "owl:someValuesFrom <http://ex.org/Drug> ."
     )
+
+
+def test_one_of():
+    onto = pymos.parse("""
+        Prefix: : <http://ex.org/>
+        Ontology: <http://ex.org/>
+        Class: Cheese
+        Class: Tomato
+        Individual: a Types: Cheese
+        Individual: b Types: Tomato
+    """)
+    expr = pymos.parse_expression("{a, b}", onto)
+    var, pattern = expression_to_pattern(expr)
+    assert var == "?t0"
+    assert _norm(pattern) == _norm(
+        "?t0 a owl:Class ; "
+        "owl:oneOf ?t1 . "
+        "?t1 rdf:first <http://ex.org/a> ; rdf:rest ?t2 . "
+        "?t2 rdf:first <http://ex.org/b> ; rdf:rest rdf:nil ."
+    )
