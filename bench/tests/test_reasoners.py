@@ -31,3 +31,14 @@ def test_owlrl_reasoner_adds_inferred_triples(pizza_text, tmp_path):
     g_out.parse(out)
 
     assert len(g_out) > len(g_in)
+
+
+from bench.reasoners.robot_docker import RobotDocker
+from bench.tests.conftest import requires_docker
+
+
+@requires_docker
+def test_robot_docker_version_smoke():
+    rd = RobotDocker(image="obolibrary/robot:v1.9.6")
+    v = rd.version()
+    assert "ROBOT" in v or "robot" in v.lower()
