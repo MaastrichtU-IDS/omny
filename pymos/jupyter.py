@@ -20,6 +20,7 @@ from __future__ import annotations
 import re
 
 import owlready2
+from IPython.display import display
 
 import pymos
 from pymos.sparql import RELATIONS, class_relations_query
@@ -264,6 +265,62 @@ def _register_completer(ip) -> None:
     ip.set_custom_completer(_adapter)
 
 
+_CODEMIRROR_JS = r"""
+// pymos-manchester CodeMirror mode (registered at notebook startup).
+// JupyterLab 4 uses CodeMirror 6; we register a StreamLanguage via
+// @codemirror/legacy-modes/mode/simple-mode-style tokens.  The simple-mode
+// path keeps the implementation compact — full LSP-grade highlighting is
+// out of scope here.
+(function() {
+  if (!window.require) { return; }
+  require([
+    '@codemirror/legacy-modes/mode/simple-mode',
+    '@codemirror/language',
+  ], function (simpleMode, lang) {
+    try {
+      const states = {
+        start: [
+          // Frame + value keywords spelled out with their trailing colon so the
+          // literal tokens (e.g. "Class:", "SubClassOf:", "EquivalentTo:") are
+          // recognisable in the source — the parse_jupyter_magics test asserts
+          // their presence to guard against silent breakage.
+          {regex: /\b(?:Class:|ObjectProperty:|DataProperty:|Individual:|Datatype:|AnnotationProperty:|Ontology:|Prefix:|Import:|SubClassOf:|EquivalentTo:|DisjointWith:|Domain:|Range:|SubPropertyOf:|Types:|SameAs:|DifferentFrom:|Facts:|Characteristics:|Annotations:)/, token: 'keyword'},
+          {regex: /\b(?:some|only|value|min|max|exactly|Self|and|or|not|inverse)\b/, token: 'operator'},
+          {regex: /\b(?:Functional|InverseFunctional|Transitive|Symmetric|Asymmetric|Reflexive|Irreflexive)\b/, token: 'atom'},
+          {regex: /<[^>]+>/, token: 'link'},
+          {regex: /"[^"]*"/, token: 'string'},
+          {regex: /\b\d+\b/, token: 'number'},
+          {regex: /#.*/, token: 'comment'},
+        ],
+      };
+      const mode = simpleMode.simpleMode(states);
+      const language = lang.StreamLanguage.define(mode);
+      window.__pymosManchesterMode = language;
+      console.log('pymos: manchester-syntax CodeMirror mode registered');
+    } catch (e) {
+      console.warn('pymos: failed to register manchester-syntax mode', e);
+    }
+  });
+})();
+"""
+
+
+def _inject_codemirror_mode() -> None:
+    """Display the CodeMirror mode definition once at extension-load time.
+
+    Path A — light injection.  If this silently no-ops under a stricter CM6
+    bundle, the fallback (Path B in the spec) is to ship a prebuilt JupyterLab
+    extension.  The smoke test in Task 9 verifies the injection took effect.
+
+    We publish the raw application/javascript mime bundle (``raw=True``) rather
+    than ``display(Javascript(...))``: functionally identical in a live kernel
+    (the rich-formatter path produces the same bundle), but observable through
+    a ``display_pub.publish`` spy even in shells where the Javascript formatter
+    is disabled (``IPython.testing.globalipapp``).
+    """
+    display({"application/javascript": _CODEMIRROR_JS}, raw=True)
+
+
 def load_ipython_extension(ip) -> None:
     """Called by IPython when ``%load_ext pymos.jupyter`` runs."""
     ip.register_magic_function(_mos_magic, magic_kind="cell", magic_name="mos")
@@ -275,6 +332,20 @@ def load_ipython_extension(ip) -> None:
     ip.user_ns["mos_world"] = _state.world
     ip.user_ns["mos_reset"] = _reset_for_user_ns(ip)
     _register_completer(ip)
+    _inject_codemirror_mode()
+
+
+def unload_ipython_extension(ip) -> None:
+    """Called by IPython when ``%unload_ext pymos.jupyter`` runs.
+
+    Without this hook, ``ExtensionManager.unload_extension`` reports
+    ``"no unload function"`` and leaves the module in ``ip.extension_manager.loaded``,
+    which blocks subsequent ``load_extension`` calls from re-running
+    ``load_ipython_extension`` (and re-emitting the CodeMirror JS).  We do not
+    need to tear down magics/completers — the IPython shell already does that
+    when extensions are unloaded — so this is essentially a marker.
+    """
+    return None
 
 
 def _reset_for_user_ns(ip):

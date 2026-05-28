@@ -166,3 +166,33 @@ def test_completer_returns_none_outside_mos_cells():
     # so the default Python completer runs instead.
     cands = _mos_complete(cell_text="x = 1\nCl", line="Cl", cursor_col=2)
     assert cands is None
+
+
+def test_load_extension_emits_codemirror_js(capsys):
+    """The injected JS payload must mention the Manchester keywords; if it doesn't,
+    highlighting is silently lost. Behavioral check happens in the docker smoke test.
+    """
+    ip = _bootstrap_ipython() or IPython.get_ipython()
+    if "pymos.jupyter" in ip.extension_manager.loaded:
+        ip.extension_manager.unload_extension("pymos.jupyter")
+    captured = []
+    orig_publish = ip.display_pub.publish
+
+    def _spy(data, metadata=None, **kwargs):
+        captured.append(data)
+        return orig_publish(data, metadata=metadata, **kwargs)
+
+    ip.display_pub.publish = _spy
+    try:
+        ip.extension_manager.load_extension("pymos.jupyter")
+    finally:
+        ip.display_pub.publish = orig_publish
+    js_blobs = [
+        d.get("application/javascript") or d.get("text/javascript")
+        for d in captured if d
+    ]
+    js_blobs = [b for b in js_blobs if b]
+    assert js_blobs, "expected at least one Javascript display blob"
+    combined = "\n".join(js_blobs)
+    for kw in ("Class:", "SubClassOf:", "EquivalentTo:", "some", "only", "manchester"):
+        assert kw in combined, f"missing {kw!r} in injected JS"
