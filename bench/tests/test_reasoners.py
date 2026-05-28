@@ -85,3 +85,20 @@ def test_konclude_materialises_owx_input(pizza_text, tmp_path):
     out = r.materialise(owx)
     assert out.exists()
     assert r.profile == "DL"
+
+
+from bench.reasoners.floors import measure_wrapper_floors
+
+
+def test_measure_wrapper_floors_returns_dict():
+    floors = measure_wrapper_floors(include_docker=False)
+    assert "owlrl" in floors
+    assert floors["owlrl"] >= 0
+
+
+@requires_docker
+def test_measure_wrapper_floors_with_docker():
+    floors = measure_wrapper_floors(include_docker=True)
+    for name in ("robot-docker", "konclude-docker"):
+        assert name in floors
+        assert floors[name] > 0
