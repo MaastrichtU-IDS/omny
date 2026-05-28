@@ -269,8 +269,28 @@ class FrameLoader:
                 entity.comment.append(value)
             else:
                 prop = self.r.get_annotation_property(prop_name)
-                name = self._py_name(prop)
-                setattr(entity, name, getattr(entity, name, []) + [value])
+                self._append_property_value(entity, prop, value)
+
+    @staticmethod
+    def _append_property_value(entity, prop, value) -> None:
+        """Add `value` to `entity.<prop>` while respecting owlready2's storage shape.
+
+        owlready2 stores values of a ``FunctionalProperty`` as a *scalar* (and
+        ``getattr`` returns ``None`` when unset); for any other property the value
+        is a list (``getattr`` returns ``[]`` when unset). Naively doing
+        ``getattr(entity, name, []) + [value]`` therefore crashes on Functional
+        properties — the default kicks in only for missing attributes, not for
+        attributes whose value is ``None``.
+        """
+        name = getattr(prop, "python_name", None) or prop.name
+        if owlready2.FunctionalProperty in prop.is_a:
+            setattr(entity, name, value)
+            return
+        current = getattr(entity, name, None)
+        if current is None:
+            setattr(entity, name, [value])
+        else:
+            current.append(value)
 
     _CHARS = {
         "Functional": owlready2.FunctionalProperty,
@@ -338,8 +358,7 @@ class FrameLoader:
             prop = self.r.get_object_property(prop_name)
         else:
             prop = self.r.get_data_property(prop_name)
-        name = self._py_name(prop)
-        setattr(ind, name, getattr(ind, name, []) + [value])
+        self._append_property_value(ind, prop, value)
 
     def _literal_or_individual(self, raw: str):
         """Parse a fact value: quoted string, boolean, int, float, or individual name."""

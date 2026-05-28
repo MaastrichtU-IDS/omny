@@ -88,6 +88,53 @@ def test_full_pizza_document():
     onto.save(file=io.BytesIO(), format="rdfxml")
 
 
+def test_facts_on_functional_object_property():
+    """owlready2 stores values of FunctionalProperty as a scalar, not a list,
+    so getattr returns None for an unset Functional property. The frame loader
+    must not do ``None + [value]`` (the previous naive append pattern)."""
+    doc = """
+    Prefix: : <http://ex.org/>
+    ObjectProperty: hasMother
+        Characteristics: Functional
+    Individual: bob
+        Facts: hasMother alice
+    """
+    onto = parse(doc)
+    bob = onto.world["http://ex.org/bob"]
+    alice = onto.world["http://ex.org/alice"]
+    # Functional → scalar storage in owlready2
+    assert bob.hasMother is alice
+
+
+def test_facts_on_functional_data_property():
+    doc = """
+    Prefix: : <http://ex.org/>
+    Prefix: xsd: <http://www.w3.org/2001/XMLSchema#>
+    DataProperty: hasAge
+        Characteristics: Functional
+        Range: xsd:integer
+    Individual: bob
+        Facts: hasAge 42
+    """
+    onto = parse(doc)
+    bob = onto.world["http://ex.org/bob"]
+    assert bob.hasAge == 42
+
+
+def test_facts_non_functional_still_works():
+    """Non-functional Facts must continue to work (list storage)."""
+    doc = """
+    Prefix: : <http://ex.org/>
+    ObjectProperty: hasFriend
+    Individual: bob
+        Facts: hasFriend alice, hasFriend carol
+    """
+    onto = parse(doc)
+    bob = onto.world["http://ex.org/bob"]
+    names = {f.name for f in bob.hasFriend}
+    assert names == {"alice", "carol"}
+
+
 # FIX 1 tests
 
 def test_custom_annotation_property():
