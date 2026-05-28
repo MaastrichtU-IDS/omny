@@ -71,16 +71,21 @@ def download_one(entry: CorpusEntry) -> Path:
 
     raw = data_dir() / f"{entry.name}.{entry.fmt}"
     if not raw.exists():
-        _http_get(entry.url, raw)
-        if entry.sha256 != "skip-checksum":
+        try:
+            _http_get(entry.url, raw)
             actual = sha256_of(raw)
-            if actual != entry.sha256:
+            if entry.sha256 != "skip-checksum" and actual != entry.sha256:
                 raise RuntimeError(
                     f"checksum mismatch for {entry.name}: "
                     f"expected {entry.sha256}, got {actual}"
                 )
-        # Always record the downloaded SHA so the run can pin retroactively
-        (data_dir() / f"{entry.name}.sha256").write_text(sha256_of(raw))
+            # Always record the downloaded SHA so the run can pin retroactively
+            (data_dir() / f"{entry.name}.sha256").write_text(actual)
+        except Exception:
+            # Don't leave a half-written file on disk; next run must re-download
+            if raw.exists():
+                raw.unlink()
+            raise
 
     if entry.fmt == "omn":
         shutil.copyfile(raw, omn)
