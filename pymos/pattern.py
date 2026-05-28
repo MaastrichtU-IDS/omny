@@ -35,7 +35,7 @@ class _Walker:
             f"anonymous target of type {type(expr).__name__} is not supported"
         )
 
-    def _restriction(self, r: "owlready2.Restriction") -> tuple[str, str]:
+    def _restriction(self, r: owlready2.Restriction) -> tuple[str, str]:
         var = self.fresh()
         prop_iri = f"<{r.property.iri}>"
         if r.type == owlready2.SOME:
@@ -59,4 +59,5 @@ def expression_to_pattern(expr) -> tuple[str, str]:
     a string of SPARQL triple patterns (no surrounding braces) ready to be
     inserted into a WHERE block.
     """
-    return _Walker()._walk(expr)
+    var, pattern = _Walker()._walk(expr)
+    return var, " ".join(pattern.split())

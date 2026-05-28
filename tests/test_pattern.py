@@ -1,5 +1,3 @@
-import owlready2
-
 import pymos
 from pymos.pattern import expression_to_pattern
 
