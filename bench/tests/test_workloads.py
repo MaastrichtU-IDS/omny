@@ -22,3 +22,35 @@ def test_bench_render_idempotent(pizza_text, tmp_path):
     assert m.wall_cold > 0
     assert m.extras["idempotent_second_pass"] is True
     assert m.extras["bytes_emitted"] > 0
+
+
+from bench.workloads.targets import pick_targets
+from bench.workloads.query import bench_query
+from bench.backends.pyoxigraph_mem import PyoxigraphMemBackend
+
+
+def test_pick_targets_returns_three(pizza_text):
+    import pymos
+    onto = pymos.parse(pizza_text)
+    targets = pick_targets(onto, k=3)
+    assert len(targets) == 3
+    assert all(t.startswith("http") for t in targets)
+
+
+def test_bench_query_super_construct(pizza_text):
+    import pymos
+    onto = pymos.parse(pizza_text)
+    targets = pick_targets(onto, k=1)
+    backend = PyoxigraphMemBackend()
+    backend.load(onto)
+    m = bench_query(
+        backend_name="pyoxigraph_mem",
+        target_iri=targets[0],
+        relation="super",
+        construct=True,
+        hot_iters=2,
+        warmup=1,
+    )
+    assert m.wall_cold >= 0
+    assert m.extras["relation"] == "super"
+    backend.close()
