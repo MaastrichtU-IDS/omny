@@ -3,7 +3,10 @@ from typing import Dict, Iterable, Optional
 
 import owlready2
 
-# Manchester operator precedence (higher binds tighter)
+# Manchester operator precedence (higher binds tighter).
+# `_PREC_TOP` is the parent context for top-level expressions and axiom operands —
+# they sit at the bottom of the precedence chain, so no operator child needs parens.
+_PREC_TOP = 0
 _PREC_OR = 1
 _PREC_AND = 2
 _PREC_NOT = 3
@@ -45,7 +48,7 @@ def _paren_if(text: str, child_prec: int, parent_prec: int) -> str:
 def render_expression(ce, prefixes: Optional[Dict[str, str]] = None) -> str:
     """Render an owlready2 class expression to a Manchester-syntax string."""
     p = dict(prefixes or {})
-    return _render(ce, p, _PREC_ATOM)
+    return _render(ce, p, _PREC_TOP)
 
 
 _FACET_REV = {
@@ -169,7 +172,8 @@ def _kw_line(label: str, operands: Iterable, p: Dict[str, str], indent: str = " 
     items = list(operands)
     if not items:
         return ""
-    rendered = ", ".join(_render(o, p, _PREC_ATOM) for o in items)
+    # Axiom operands are top-level — no outer parens around an And/Or/Not.
+    rendered = ", ".join(_render(o, p, _PREC_TOP) for o in items)
     return f"{indent}{label}: {rendered}\n"
 
 

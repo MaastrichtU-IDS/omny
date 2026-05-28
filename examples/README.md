@@ -1,6 +1,6 @@
 # pymos demonstration notebooks
 
-Three Jupyter notebooks that demonstrate `pymos`, packaged with Docker Compose so
+Four Jupyter notebooks that demonstrate `pymos`, packaged with Docker Compose so
 every dependency is contained.
 
 ## Launch
@@ -26,8 +26,9 @@ Stop everything with `docker compose down`.
 | `01_parsing.ipynb` | Parse a Manchester `.omn` document into an owlready2 ontology with `pymos.parse`; parse single class expressions with `pymos.parse_expression`. Pure Python, no Java. |
 | `02_class_relations.ipynb` | Build SPARQL with `class_relations_query`; walk the relation table (super/sub/direct/equiv/individual); run the same query across the owlready2, rdflib, and pyoxigraph backends. |
 | `03_remote_endpoint.ipynb` | Serialise the ontology, load it into the live Oxigraph server, and query it through `run_endpoint` — the full end-to-end remote-triplestore story. |
+| `04_rendering.ipynb` | Render owlready2 ontologies back to Manchester syntax with `pymos.render`, `pymos.render_frame`, and `pymos.render_expression`. Demonstrates precedence-aware expression rendering, frame rendering for each entity kind, and the `parse → render → parse` round-trip / idempotency contract on `biomed.omn`. |
 
-`02` and `03` use `data/biomed.omn`, a small hand-written biomedical ontology.
+`02`, `03`, and `04` use `data/biomed.omn`, a small hand-written biomedical ontology.
 
 ## Notes
 
