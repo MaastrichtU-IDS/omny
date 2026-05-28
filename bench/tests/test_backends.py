@@ -1,5 +1,6 @@
 from pymos import parse
 from bench.backends.owlready2_mem import OwlreadyMemBackend
+from bench.backends.pyoxigraph_mem import PyoxigraphMemBackend
 
 
 def test_owlready_mem_load_and_select(pizza_text):
@@ -19,3 +20,16 @@ def test_owlready_mem_name_and_persistence_flag():
     b = OwlreadyMemBackend()
     assert b.name == "owlready2_mem"
     assert b.is_persistent is False
+
+
+def test_pyoxigraph_mem_load_and_construct(pizza_text):
+    onto = parse(pizza_text)
+    b = PyoxigraphMemBackend()
+    b.load(onto)
+    triples = list(b.construct(
+        "CONSTRUCT { ?s ?p ?o } WHERE { ?s ?p ?o } LIMIT 5"
+    ))
+    assert len(triples) > 0
+    rows = list(b.select("SELECT (COUNT(?s) AS ?n) WHERE { ?s ?p ?o }"))
+    assert int(rows[0]["n"].value) > 0
+    b.close()
