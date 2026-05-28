@@ -1,7 +1,10 @@
 import io
+from pathlib import Path
+
 import pyoxigraph
 import rdflib
 
+import pymos
 from pymos import parse, class_relations_query
 from pymos.store import run_rdflib, run_pyoxigraph
 
@@ -83,6 +86,60 @@ def test_direct_sub_excludes_transitive():
     iris = {str(r[0]) for r in rows}
     assert "http://ex.org/Pizza" in iris
     assert "http://ex.org/Margherita" not in iris
+
+
+def _pizza_onto():
+    text = Path("tests/data/pizza.omn").read_text()
+    return pymos.parse(text)
+
+
+def _pyox_store(onto):
+    nt = onto.world.as_rdflib_graph().serialize(format="nt").encode()
+    store = pyoxigraph.Store()
+    store.load(io.BytesIO(nt), format=pyoxigraph.RdfFormat.N_TRIPLES)
+    return store
+
+
+# pizza.omn declares ``Prefix: : <http://ex.org/>`` so its classes live under
+# ``http://ex.org/``, but the ontology IRI ``<http://ex.org/pizza.owl>`` makes
+# ``onto.base_iri`` ``http://ex.org/pizza.owl#``.  parse_expression resolves
+# unqualified names against ``onto.base_iri`` by default, which would point at
+# phantom classes that don't exist in the data.  Passing ``prefixes={"": ...}``
+# overrides that and resolves names to the actual classes in the graph.
+_PIZZA_NS = {"": "http://ex.org/"}
+
+
+def test_anonymous_equiv_finds_named_class_rdflib():
+    onto = _pizza_onto()
+    # Margherita EquivalentTo: hasTopping only (Cheese or Tomato)
+    expr = pymos.parse_expression(
+        "hasTopping only (Cheese or Tomato)", onto, prefixes=_PIZZA_NS
+    )
+    q = class_relations_query(expr, relations=("equiv",), construct=False)
+    rows = {str(r[0]) for r in run_rdflib(q, onto.world.as_rdflib_graph())}
+    assert "http://ex.org/Margherita" in rows
+
+
+def test_anonymous_equiv_finds_named_class_pyoxigraph():
+    onto = _pizza_onto()
+    expr = pymos.parse_expression(
+        "hasTopping only (Cheese or Tomato)", onto, prefixes=_PIZZA_NS
+    )
+    q = class_relations_query(expr, relations=("equiv",), construct=False)
+    store = _pyox_store(onto)
+    rows = {str(s["rel"]).strip("<>") for s in run_pyoxigraph(q, store)}
+    assert "http://ex.org/Margherita" in rows
+
+
+def test_anonymous_equiv_owlready2_select():
+    onto = _pizza_onto()
+    expr = pymos.parse_expression(
+        "hasTopping only (Cheese or Tomato)", onto, prefixes=_PIZZA_NS
+    )
+    q = class_relations_query(expr, relations=("equiv",), construct=False)
+    from pymos.store import run_owlready2
+    rows = {r[0].iri for r in run_owlready2(q, onto.world)}
+    assert "http://ex.org/Margherita" in rows
 
 
 def test_equiv_both_directions():

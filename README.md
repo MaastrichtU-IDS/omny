@@ -247,6 +247,73 @@ IRIs and the count of axioms per entity.
 
 ---
 
+## Anonymous expression targets
+
+`class_relations_query` accepts an anonymous Manchester class expression as its
+target. Parse the expression first with `parse_expression`, then pass the returned
+owlready2 construct directly:
+
+```python
+import pymos
+from pymos import class_relations_query
+from pymos.store import run_rdflib
+
+onto = pymos.parse(open("pizza.omn").read())
+expr = pymos.parse_expression(
+    "hasTopping only (Cheese or Tomato)",
+    onto,
+    prefixes={"": "http://ex.org/"},   # see note below
+)
+
+q = class_relations_query(expr, relations=("equiv",), construct=False)
+rows = [str(r[0]) for r in run_rdflib(q, onto.world.as_rdflib_graph())]
+print(rows)
+# ['http://ex.org/Margherita']
+```
+
+The generated SPARQL contains a structural sub-pattern that matches the
+blank-node shape owlready2 writes for the expression, binding a fresh variable
+(`?t0`) to any matching node. The relation clauses then use that variable.
+
+**Supported constructs**: `R some C`, `R only C`, `R value v`, `R Self`,
+`R min/max/exactly N [C]` (qualified + unqualified), `A and B`, `A or B`,
+`not A`, `{a, b, ...}`, `inverse R`, and arbitrary nesting.
+
+**Limitations**
+
+- **Operand order matters.** Two structurally equivalent expressions with
+  permuted intersection/union operands do not match each other. (`A and B` and
+  `B and A` produce different patterns; only the as-declared order matches the
+  blank-node spine.)
+- **Structural identity only.** With no reasoning, semantically equivalent
+  but structurally distinct expressions do not match (e.g. an `EquivalentTo`
+  axiom defined via an intermediate named class is invisible to the structural
+  pattern).
+- **Data ranges (`ConstrainedDatatype`) and literal `hasValue` targets are
+  not supported.** Use a named individual (`hasTopping value myCheese`) rather
+  than a literal (`age value 42`).
+
+**Namespace note**
+
+`parse_expression` resolves bare names (e.g. `Cheese`, `hasTopping`) against
+`onto.base_iri`, NOT against the document's `Prefix: :` declaration. If your
+ontology declares a `Prefix: :` that differs from its `Ontology: <...>` IRI —
+which is common — pass the empty-prefix mapping explicitly:
+
+```python
+expr = pymos.parse_expression(
+    "hasTopping only (Cheese or Tomato)",
+    onto,
+    prefixes={"": "http://ex.org/"},
+)
+```
+
+Without this override, bare names resolve to fresh entities under
+`onto.base_iri` that don't exist in the loaded graph, and the query returns
+no rows.
+
+---
+
 ## Caveats
 
 - **No Java required.** `pymos` is pure Python; it does not call a DL reasoner or
@@ -262,9 +329,6 @@ IRIs and the count of axioms per entity.
 - **`run_owlready2` is SELECT-only.** owlready2's built-in SPARQL engine cannot
   parse CONSTRUCT queries.  For CONSTRUCT against owlready2 data use
   `run_rdflib(q, world.as_rdflib_graph())`.
-- **Named-class / IRI targets only.** The `target` argument of `class_relations_query`
-  must be a named class, a full IRI, or a SPARQL variable.  Anonymous class
-  expressions are not yet supported as targets.
 - **Frame tokeniser is not string-aware.** A token that looks like `Keyword:` at the
   start of a line *inside a multi-line quoted literal* can cause incorrect frame
   splitting.  Single-line operands and standard Manchester frame forms work correctly.

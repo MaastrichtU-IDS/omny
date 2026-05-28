@@ -61,3 +61,59 @@ def test_named_class_accepts_owlready_class(onto):
     pizza = parse_expression("Pizza", onto)
     q = class_relations_query(pizza, relations=("super",))
     assert "<http://pymos.test/onto.owl#Pizza>" in q
+
+
+import pymos
+from pymos.sparql import _target_term
+
+
+def test_target_term_named_string():
+    var, extra = _target_term("<http://ex.org/Pizza>")
+    assert var == "<http://ex.org/Pizza>"
+    assert extra == ""
+
+
+def test_target_term_owlready_entity():
+    onto = pymos.parse("Prefix: : <http://ex.org/>\nOntology: <http://ex.org/>\nClass: Pizza")
+    pizza = onto.world["http://ex.org/Pizza"]
+    var, extra = _target_term(pizza)
+    assert var == "<http://ex.org/Pizza>"
+    assert extra == ""
+
+
+def test_target_term_anonymous_construct():
+    onto = pymos.parse("""
+        Prefix: : <http://ex.org/>
+        Ontology: <http://ex.org/>
+        ObjectProperty: treats
+        Class: Drug
+    """)
+    expr = pymos.parse_expression("treats some Drug", onto)
+    var, extra = _target_term(expr)
+    assert var.startswith("?t")
+    assert "owl:Restriction" in extra
+    assert "owl:someValuesFrom <http://ex.org/Drug>" in extra
+
+
+def test_anonymous_target_query_builds_and_parses():
+    onto = pymos.parse("""
+        Prefix: : <http://ex.org/>
+        Ontology: <http://ex.org/>
+        ObjectProperty: treats
+        Class: Drug
+        Class: Disease
+    """)
+    expr = pymos.parse_expression("Drug and (treats some Disease)", onto)
+    q = class_relations_query(expr, relations=("equiv",), construct=False)
+    from rdflib.plugins.sparql import prepareQuery
+    prepareQuery(q)  # must parse as valid SPARQL
+    assert "owl:intersectionOf" in q
+    assert "owl:someValuesFrom <http://ex.org/Disease>" in q
+    # The equiv clause must use the bound target variable, not a literal IRI.
+    assert "?t0 owl:equivalentClass" in q or "owl:equivalentClass ?t0" in q
+
+
+def test_unsupported_target_type_raises():
+    import pytest
+    with pytest.raises(TypeError):
+        class_relations_query(12345, relations=("equiv",))
