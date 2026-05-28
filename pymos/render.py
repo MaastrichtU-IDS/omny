@@ -245,3 +245,42 @@ def render_frame(entity, prefixes: Optional[Dict[str, str]] = None) -> str:
         return out
 
     raise ValueError(f"cannot render frame for {entity!r}")
+
+
+# --- Document rendering ------------------------------------------------------
+
+def render(onto, prefixes: Optional[Dict[str, str]] = None,
+           include_imports: bool = True) -> str:
+    """Render an owlready2 ontology as a Manchester OWL syntax document.
+
+    Currently emits Prefix declarations + Ontology header, then frames in the
+    order ObjectProperty -> DataProperty -> Class -> Individual (each sorted
+    by IRI for diff-stability). Annotations, Individual Facts/SameAs/
+    DifferentFrom, AnnotationProperty and Datatype frames are not yet rendered;
+    a follow-up will extend `render_frame` to cover them.
+    """
+    p = dict(prefixes or {})
+    parts = []
+
+    for prefix, base in sorted(p.items()):
+        parts.append(f"Prefix: {prefix}: <{base}>")
+
+    base_iri = onto.base_iri.rstrip("#").rstrip("/")
+    parts.append(f"Ontology: <{base_iri}>")
+
+    if include_imports:
+        for imp in getattr(onto, "imported_ontologies", []) or []:
+            parts.append(f"Import: <{imp.base_iri}>")
+
+    parts.append("")  # blank line before frames
+
+    for op in sorted(onto.object_properties(), key=lambda e: e.iri):
+        parts.append(render_frame(op, p))
+    for dp in sorted(onto.data_properties(), key=lambda e: e.iri):
+        parts.append(render_frame(dp, p))
+    for cls in sorted(onto.classes(), key=lambda e: e.iri):
+        parts.append(render_frame(cls, p))
+    for ind in sorted(onto.individuals(), key=lambda e: e.iri):
+        parts.append(render_frame(ind, p))
+
+    return "\n".join(parts).rstrip() + "\n"

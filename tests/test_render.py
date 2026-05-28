@@ -194,3 +194,94 @@ def test_render_frame_drops_empty_axiom_lines():
     assert "SubClassOf:" not in out
     assert "EquivalentTo:" not in out
     assert "DisjointWith:" not in out
+
+
+# ---- Task 21: document renderer + round-trip --------------------------------
+
+from pymos.render import render
+
+# Fixture covering exactly what render currently supports: Prefix/Ontology header,
+# Class frames (SubClassOf/EquivalentTo/DisjointWith), Object/DataProperty frames
+# (Domain/Range/Characteristics/InverseOf), Individual frames (Types).
+# Annotations / Facts / SameAs / DifferentFrom / AnnotationProperty / Datatype
+# rendering is a follow-up (see render.py TODO).
+_ROUND_TRIP_DOC = """\
+Prefix: : <http://ex.org/>
+Prefix: xsd: <http://www.w3.org/2001/XMLSchema#>
+
+Ontology: <http://ex.org/pymos-rt.owl>
+
+Class: Food
+Class: Topping
+Class: Cheese
+    SubClassOf: Topping
+Class: Tomato
+    SubClassOf: Topping
+Class: Pizza
+    SubClassOf: Food
+Class: Margherita
+    SubClassOf: Pizza, hasTopping some Cheese
+    EquivalentTo: hasTopping only (Cheese or Tomato)
+    DisjointWith: IceCream
+Class: IceCream
+
+ObjectProperty: hasTopping
+    Domain: Pizza
+    Range: Topping
+    Characteristics: Transitive
+ObjectProperty: isToppingOf
+    InverseOf: hasTopping
+
+DataProperty: hasCalories
+    Domain: Pizza
+    Range: xsd:integer
+
+Individual: margherita1
+    Types: Margherita
+Individual: iceCream1
+    Types: IceCream
+"""
+
+_RT_PREFIXES = {"": "http://ex.org/", "xsd": "http://www.w3.org/2001/XMLSchema#"}
+
+
+def test_render_document_emits_header_and_frames():
+    o = parse(_ROUND_TRIP_DOC)
+    text = render(o, prefixes=_RT_PREFIXES)
+    assert "Prefix: : <http://ex.org/>" in text
+    assert "Ontology: <http://ex.org/pymos-rt.owl>" in text
+    assert "Class: :Margherita" in text
+    assert "ObjectProperty: :hasTopping" in text
+    assert "DataProperty: :hasCalories" in text
+    assert "Individual: :margherita1" in text
+
+
+def test_render_document_round_trips_structurally():
+    onto1 = parse(_ROUND_TRIP_DOC)
+    text = render(onto1, prefixes=_RT_PREFIXES)
+    onto2 = parse(text)
+
+    iris1 = {c.iri for c in onto1.classes()}
+    iris2 = {c.iri for c in onto2.classes()}
+    assert iris1 == iris2
+
+    for iri in iris1:
+        c1, c2 = onto1.world[iri], onto2.world[iri]
+        supers1 = [s for s in c1.is_a if s is not owlready2.Thing]
+        supers2 = [s for s in c2.is_a if s is not owlready2.Thing]
+        assert len(supers1) == len(supers2), f"is_a mismatch for {iri}"
+        assert len(c1.equivalent_to) == len(c2.equivalent_to), f"equiv mismatch for {iri}"
+
+    op1 = {p.iri for p in onto1.object_properties()}
+    op2 = {p.iri for p in onto2.object_properties()}
+    assert op1 == op2
+
+    ind1 = {i.iri for i in onto1.individuals()}
+    ind2 = {i.iri for i in onto2.individuals()}
+    assert ind1 == ind2
+
+
+def test_render_document_idempotent_on_second_pass():
+    text1 = render(parse(_ROUND_TRIP_DOC), prefixes=_RT_PREFIXES)
+    text2 = render(parse(text1), prefixes=_RT_PREFIXES)
+    assert text1 == text2  # second pass is stable
