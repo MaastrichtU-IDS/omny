@@ -6,7 +6,6 @@ tests of this module.
 """
 from __future__ import annotations
 
-import importlib
 import json
 import os
 import statistics
@@ -56,7 +55,9 @@ def measure_in_process(
     `measure_in_subprocess` so RSS is clean.
     """
     proc = psutil.Process()
-    tracemalloc.start()
+    already_tracing = tracemalloc.is_tracing()
+    if not already_tracing:
+        tracemalloc.start()
 
     rss_before = proc.memory_info().rss
     wall_cold, cpu_cold = _run_once(target, args)
@@ -74,7 +75,8 @@ def measure_in_process(
         rss_peak = max(rss_peak, proc.memory_info().rss)
 
     _, peak_python = tracemalloc.get_traced_memory()
-    tracemalloc.stop()
+    if not already_tracing:
+        tracemalloc.stop()
 
     return Measurement(
         wall_cold=wall_cold,
@@ -110,7 +112,7 @@ def measure_in_subprocess(
         [sys.executable, "-c", _SUBPROC_RUNNER, module, func, json.dumps(list(args)),
          str(hot_iters), str(warmup)],
         capture_output=True, text=True, timeout=timeout,
-        env={**os.environ, "PYTHONPATH": os.getcwd()},
+        env={**os.environ, "PYTHONPATH": os.pathsep.join(filter(None, [os.getcwd(), os.environ.get("PYTHONPATH", "")]))},
     )
     if proc.returncode != 0:
         raise RuntimeError(f"subprocess failed: {proc.stderr}")
