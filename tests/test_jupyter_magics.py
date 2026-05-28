@@ -70,3 +70,17 @@ def test_reason_materializes_inferred_subclass():
     assert pizza in parents, (
         f"expected Pizza in Margherita.ancestors() after %reason, got {parents}"
     )
+
+
+def test_mos_query_equiv_finds_named_class(capsys):
+    ip = _ip()
+    ip.run_cell_magic("mos", "", (
+        "ObjectProperty: hasTopping\n"
+        "Class: Pizza\n"
+        "Class: Cheese\n"
+        "Class: Margherita\n"
+        "    EquivalentTo: Pizza and (hasTopping some Cheese)\n"
+    ))
+    ip.run_cell_magic("mos_query", "equiv", "Pizza and (hasTopping some Cheese)")
+    out = capsys.readouterr().out
+    assert "http://pymos.test/notebook#Margherita" in out
