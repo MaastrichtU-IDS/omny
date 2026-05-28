@@ -316,3 +316,130 @@ def test_render_nested_precedence_or_under_and(onto):
 def test_render_double_negation(onto):
     out = _rt("not (not A)", onto)
     assert out.count("not ") == 2
+
+
+# ---- Rendering fidelity: Annotations / Facts / SameAs / DifferentFrom -------
+# ---- AnnotationProperty / Datatype / full pizza.omn round-trip --------------
+
+_FIDELITY_PREFIXES = {
+    "": "http://ex.org/",
+    "rdfs": "http://www.w3.org/2000/01/rdf-schema#",
+    "xsd": "http://www.w3.org/2001/XMLSchema#",
+}
+
+
+def test_render_class_annotations():
+    doc = """
+    Prefix: : <http://ex.org/>
+    Prefix: rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+    Class: Pizza
+        Annotations: rdfs:label "Pizza"
+        SubClassOf: Food
+    """
+    o = parse(doc)
+    out = render_frame(o.world["http://ex.org/Pizza"], prefixes=_FIDELITY_PREFIXES)
+    assert "Annotations:" in out
+    assert "rdfs:label" in out and '"Pizza"' in out
+    assert "SubClassOf: :Food" in out
+
+
+def test_render_individual_facts():
+    doc = """
+    Prefix: : <http://ex.org/>
+    Prefix: xsd: <http://www.w3.org/2001/XMLSchema#>
+    DataProperty: hasCalories
+        Range: xsd:integer
+    Individual: bob
+        Types: Person
+        Facts: hasCalories 800
+    """
+    o = parse(doc)
+    out = render_frame(o.world["http://ex.org/bob"], prefixes=_FIDELITY_PREFIXES)
+    assert "Facts:" in out
+    assert ":hasCalories 800" in out
+
+
+def test_render_individual_same_as():
+    doc = """
+    Prefix: : <http://ex.org/>
+    Individual: bob
+        SameAs: robert
+    """
+    o = parse(doc)
+    out = render_frame(o.world["http://ex.org/bob"], prefixes=_FIDELITY_PREFIXES)
+    assert "SameAs: :robert" in out
+
+
+def test_render_individual_different_from():
+    doc = """
+    Prefix: : <http://ex.org/>
+    Individual: bob
+        DifferentFrom: alice
+    """
+    o = parse(doc)
+    out = render_frame(o.world["http://ex.org/bob"], prefixes=_FIDELITY_PREFIXES)
+    assert "DifferentFrom: :alice" in out
+
+
+def test_render_annotation_property_frame():
+    doc = """
+    Prefix: : <http://ex.org/>
+    AnnotationProperty: hasNote
+    """
+    o = parse(doc)
+    p = o.world["http://ex.org/hasNote"]
+    out = render_frame(p, prefixes=_FIDELITY_PREFIXES)
+    assert out.startswith("AnnotationProperty: :hasNote")
+
+
+def test_render_datatype_frame_in_document():
+    doc = """
+    Prefix: : <http://ex.org/>
+    Prefix: xsd: <http://www.w3.org/2001/XMLSchema#>
+    Datatype: xsd:integer
+    Class: Pizza
+    """
+    o = parse(doc)
+    text = render(o, prefixes=_FIDELITY_PREFIXES)
+    assert "Datatype: xsd:integer" in text
+
+
+def test_full_pizza_document_round_trips_structurally():
+    """The complete pizza.omn fixture covers every frame and axiom kind pymos
+    supports — round-trip must preserve class/property/individual sets and
+    axiom counts after rendering with full fidelity."""
+    doc = open("tests/data/pizza.omn").read()
+    onto1 = parse(doc)
+    text = render(onto1, prefixes=_FIDELITY_PREFIXES)
+    onto2 = parse(text)
+
+    iris1 = {c.iri for c in onto1.classes()}
+    iris2 = {c.iri for c in onto2.classes()}
+    assert iris1 == iris2
+
+    op1 = {p.iri for p in onto1.object_properties()}
+    op2 = {p.iri for p in onto2.object_properties()}
+    assert op1 == op2
+
+    dp1 = {p.iri for p in onto1.data_properties()}
+    dp2 = {p.iri for p in onto2.data_properties()}
+    assert dp1 == dp2
+
+    ind1 = {i.iri for i in onto1.individuals()}
+    ind2 = {i.iri for i in onto2.individuals()}
+    assert ind1 == ind2
+
+    for iri in iris1:
+        c1, c2 = onto1.world[iri], onto2.world[iri]
+        supers1 = [s for s in c1.is_a if s is not owlready2.Thing]
+        supers2 = [s for s in c2.is_a if s is not owlready2.Thing]
+        assert len(supers1) == len(supers2), f"is_a mismatch for {iri}"
+        assert len(c1.equivalent_to) == len(c2.equivalent_to), \
+            f"equivalent_to mismatch for {iri}"
+
+
+def test_full_pizza_document_idempotent_on_second_pass():
+    doc = open("tests/data/pizza.omn").read()
+    text1 = render(parse(doc), prefixes=_FIDELITY_PREFIXES)
+    text2 = render(parse(text1), prefixes=_FIDELITY_PREFIXES)
+    assert text1 == text2
