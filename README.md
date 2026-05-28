@@ -1,12 +1,17 @@
 # pymos
 
-Pure-Python Manchester OWL Syntax parser for [owlready2](https://owlready2.readthedocs.io/),
-plus a store-agnostic SPARQL query builder for class-relation retrieval.  No Java required.
+Pure-Python Manchester OWL Syntax **parser and renderer** for
+[owlready2](https://owlready2.readthedocs.io/), plus a store-agnostic SPARQL query
+builder for class-relation retrieval.  No Java required.
 
-`pymos` lets you load a `.omn` (Manchester OWL) document directly into an owlready2
-ontology and then query the asserted graph for a class's superclasses, subclasses,
-equivalent classes, or instances — across any SPARQL-capable backend (rdflib, pyoxigraph,
-owlready2's built-in engine, or a remote endpoint).
+`pymos` lets you:
+
+1. **Parse** a `.omn` (Manchester OWL) document directly into an owlready2 ontology.
+2. **Query** the asserted graph for a class's superclasses, subclasses, equivalent
+   classes, or instances — across any SPARQL-capable backend (rdflib, pyoxigraph,
+   owlready2's built-in engine, or a remote endpoint).
+3. **Render** an owlready2 ontology back to a Manchester document — full round-trip,
+   precedence-aware, deterministic output.
 
 ---
 
@@ -158,6 +163,74 @@ print([str(s["rel"]) for s in results])
 #  '<http://example.org/Food>',
 #  '<http://example.org/MargheritaPizza>']
 ```
+
+---
+
+## Usage D — Render back to Manchester
+
+`pymos.render(onto, prefixes=...)` produces a Manchester OWL syntax document
+from an owlready2 ontology — the round-trip companion to `parse`.
+
+```python
+import pymos
+
+doc = """
+Prefix: : <http://example.org/>
+Prefix: rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+
+Class: Pizza
+    Annotations: rdfs:label "Pizza"
+    SubClassOf: Food
+    DisjointWith: IceCream
+
+ObjectProperty: hasTopping
+    Domain: Pizza
+    Range: Topping
+    Characteristics: Transitive
+
+Individual: margherita1
+    Types: Pizza
+    Facts: hasTopping cheese1
+"""
+
+onto = pymos.parse(doc)
+text = pymos.render(onto, prefixes={
+    "": "http://example.org/",
+    "rdfs": "http://www.w3.org/2000/01/rdf-schema#",
+})
+print(text)
+```
+
+`render` emits frames in stable order (Datatype → AnnotationProperty →
+ObjectProperty → DataProperty → Class → Individual), each sorted by IRI.
+Annotations, `Facts:`, `SameAs:`, `DifferentFrom:`, property `Characteristics:`,
+and `InverseOf:` are all rendered.  A second pass is byte-identical — useful
+for deterministic diff-friendly output.
+
+### Render a single class expression
+
+```python
+from pymos import parse_expression, render_expression
+
+prefixes = {"": "http://example.org/"}
+ce = parse_expression("hasTopping some (Cheese or Tomato)", onto, prefixes=prefixes)
+print(render_expression(ce, prefixes=prefixes))
+# :hasTopping some (:Cheese or :Tomato)
+```
+
+`render_expression` is precedence-aware: lower-precedence operands (`or`) are
+parenthesised inside higher-precedence parents (`and`) automatically.
+
+### Round-trip
+
+```python
+text1 = pymos.render(pymos.parse(doc), prefixes=prefixes)
+text2 = pymos.render(pymos.parse(text1), prefixes=prefixes)
+assert text1 == text2   # idempotent
+```
+
+`parse → render → parse` preserves the set of class / property / individual
+IRIs and the count of axioms per entity.
 
 ---
 

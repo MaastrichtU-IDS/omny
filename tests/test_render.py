@@ -1,8 +1,8 @@
 """Tests for owlready2 -> Manchester rendering (Milestone 5)."""
 import owlready2
 
-from pymos import parse_expression
-from pymos.render import render_expression
+from pymos import parse, parse_expression
+from pymos.render import render, render_expression, render_frame
 
 
 def _rt(expr, onto, prefixes=None):
@@ -92,9 +92,6 @@ def test_render_inverse(onto):
 
 
 # ---- Task 20: frame renderers ------------------------------------------------
-
-from pymos import parse
-from pymos.render import render_frame
 
 
 def test_render_class_frame_subclass_equivalent_disjoint():
@@ -197,8 +194,6 @@ def test_render_frame_drops_empty_axiom_lines():
 
 
 # ---- Task 21: document renderer + round-trip --------------------------------
-
-from pymos.render import render
 
 # Fixture covering exactly what render currently supports: Prefix/Ontology header,
 # Class frames (SubClassOf/EquivalentTo/DisjointWith), Object/DataProperty frames
