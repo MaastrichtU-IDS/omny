@@ -1,0 +1,24 @@
+services:
+  notebook:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    working_dir: /workspace
+    environment:
+      # Ensure intra-compose calls to the triplestore bypass any inherited
+      # HTTP proxy (rootless daemons may inject proxy env into containers).
+      no_proxy: "localhost,127.0.0.1,triplestore"
+      NO_PROXY: "localhost,127.0.0.1,triplestore"
+    volumes:
+      # Mount the repo root so `pip install -e .` targets the live working copy.
+      - ..:/workspace
+    ports:
+      - "8888:8888"
+    depends_on:
+      - triplestore
+
+  triplestore:
+    image: ghcr.io/oxigraph/oxigraph:latest
+    command: ["serve", "--location", "/data", "--bind", "0.0.0.0:7878"]
+    ports:
+      - "7878:7878"

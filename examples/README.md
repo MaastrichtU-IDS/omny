@@ -1,0 +1,39 @@
+# pymos demonstration notebooks
+
+Three Jupyter notebooks that demonstrate `pymos`, packaged with Docker Compose so
+every dependency is contained.
+
+## Launch
+
+```bash
+cd examples
+docker compose up --build
+```
+
+Then open **http://localhost:8888** (no token required — demo configuration).
+The notebooks live under `notebooks/` in the JupyterLab file browser.
+
+A live Oxigraph SPARQL server also starts and is reachable:
+- from the notebook container at `http://triplestore:7878`
+- from your host at `http://localhost:7878`
+
+Stop everything with `docker compose down`.
+
+## Notebooks
+
+| Notebook | What it shows |
+|----------|---------------|
+| `01_parsing.ipynb` | Parse a Manchester `.omn` document into an owlready2 ontology with `pymos.parse`; parse single class expressions with `pymos.parse_expression`. Pure Python, no Java. |
+| `02_class_relations.ipynb` | Build SPARQL with `class_relations_query`; walk the relation table (super/sub/direct/equiv/individual); run the same query across the owlready2, rdflib, and pyoxigraph backends. |
+| `03_remote_endpoint.ipynb` | Serialise the ontology, load it into the live Oxigraph server, and query it through `run_endpoint` — the full end-to-end remote-triplestore story. |
+
+`02` and `03` use `data/biomed.omn`, a small hand-written biomedical ontology.
+
+## Notes
+
+- pymos is installed **editable** from the mounted repo, so the notebooks always run
+  against your live working copy.
+- Notebook sources are kept as jupytext percent-format `.py` files (paired with the
+  `.ipynb`) for clean diffs; edit either and they stay in sync.
+- pymos queries the **asserted** graph only — no reasoning. See the project README
+  caveats.
