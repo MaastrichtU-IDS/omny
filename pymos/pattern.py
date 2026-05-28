@@ -31,6 +31,14 @@ class _Walker:
     def _walk(self, expr) -> tuple[str, str]:
         if isinstance(expr, owlready2.Restriction):
             return self._restriction(expr)
+        if isinstance(expr, owlready2.And):
+            var = self.fresh()
+            list_head, list_triples = self._list_pattern(expr.Classes)
+            return var, (
+                f"{var} a owl:Class ; "
+                f"owl:intersectionOf {list_head} . "
+                f"{list_triples}"
+            )
         raise ValueError(
             f"anonymous target of type {type(expr).__name__} is not supported"
         )
@@ -95,6 +103,30 @@ class _Walker:
         raise ValueError(
             f"restriction type {r.type} is not supported"
         )
+
+    def _list_pattern(self, items) -> tuple[str, str]:
+        """Return (head_var, pattern) for an rdf:List of operands.
+
+        Emits a fixed-length, ordered list pattern that matches the canonical
+        rdf:first/rdf:rest spine owlready2 writes for intersection/union/oneOf.
+        Nested anonymous operands contribute their own structural triples.
+        """
+        head = self.fresh()
+        triples = []
+        current = head
+        for i, item in enumerate(items):
+            item_term, extra = self.operand(item)
+            if i < len(items) - 1:
+                nxt = self.fresh()
+                triples.append(f"{current} rdf:first {item_term} ; rdf:rest {nxt} .")
+                if extra:
+                    triples.append(extra)
+                current = nxt
+            else:
+                triples.append(f"{current} rdf:first {item_term} ; rdf:rest rdf:nil .")
+                if extra:
+                    triples.append(extra)
+        return head, " ".join(triples)
 
 
 def expression_to_pattern(expr) -> tuple[str, str]:

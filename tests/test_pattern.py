@@ -129,3 +129,44 @@ def test_qualified_max():
         'owl:maxQualifiedCardinality "3"^^xsd:nonNegativeInteger ; '
         'owl:onClass <http://ex.org/Cheese> .'
     )
+
+
+def test_intersection_two_named():
+    onto = pymos.parse("""
+        Prefix: : <http://ex.org/>
+        Ontology: <http://ex.org/>
+        Class: A
+        Class: B
+    """)
+    expr = pymos.parse_expression("A and B", onto)
+    var, pattern = expression_to_pattern(expr)
+    assert var == "?t0"
+    assert _norm(pattern) == _norm(
+        "?t0 a owl:Class ; "
+        "owl:intersectionOf ?t1 . "
+        "?t1 rdf:first <http://ex.org/A> ; rdf:rest ?t2 . "
+        "?t2 rdf:first <http://ex.org/B> ; rdf:rest rdf:nil ."
+    )
+
+
+def test_intersection_named_and_anonymous():
+    onto = pymos.parse("""
+        Prefix: : <http://ex.org/>
+        Ontology: <http://ex.org/>
+        ObjectProperty: treats
+        Class: Drug
+        Class: Disease
+    """)
+    expr = pymos.parse_expression("Drug and (treats some Disease)", onto)
+    var, pattern = expression_to_pattern(expr)
+    assert var == "?t0"
+    # ?t0 = intersection node; ?t1 / ?t2 = list spine; ?t3 = nested someValuesFrom restriction.
+    assert _norm(pattern) == _norm(
+        "?t0 a owl:Class ; "
+        "owl:intersectionOf ?t1 . "
+        "?t1 rdf:first <http://ex.org/Drug> ; rdf:rest ?t2 . "
+        "?t2 rdf:first ?t3 ; rdf:rest rdf:nil . "
+        "?t3 a owl:Restriction ; "
+        "owl:onProperty <http://ex.org/treats> ; "
+        "owl:someValuesFrom <http://ex.org/Disease> ."
+    )
