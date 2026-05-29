@@ -160,7 +160,7 @@ def test_completer_offers_restriction_operators_after_property():
 
 
 def test_completer_returns_none_outside_mos_cells():
-    ip = _ip()
+    _ip()  # load extension + reset state (return value unused)
     from pymos.jupyter import _mos_complete
     # No %%mos magic on the first line → completer should yield None
     # so the default Python completer runs instead.
@@ -190,7 +190,7 @@ def test_mos_query_unknown_relation_lists_valid(capsys):
 def test_register_completer_adapter_forwards_to_mos_complete():
     """Verify the IPython adapter glue translates event objects correctly."""
     from types import SimpleNamespace
-    from pymos.jupyter import _register_completer, _state
+    from pymos.jupyter import _register_completer
     # Reset state then add a class so dynamic candidates are non-empty.
     ip = _ip()
     ip.run_cell_magic("mos", "", "Class: Pizza")
