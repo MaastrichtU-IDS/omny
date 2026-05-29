@@ -1,0 +1,217 @@
+"""Snapshot orchestrator: iterate (ontology × backend × reasoner × workload)
+cells, run each in a fresh subprocess, write results.json + .csv."""
+from __future__ import annotations
+
+import csv
+import json
+import os
+import socket
+import sys
+import time
+from dataclasses import asdict, dataclass, field
+from pathlib import Path
+from typing import Iterable
+
+import pymos
+
+from bench.corpus import CORPUS, CorpusEntry
+from bench.download import cached_omn_path, download_one
+from bench.measure import Measurement
+from bench.workloads.parse import bench_parse
+from bench.workloads.render import bench_render
+from bench.workloads.query import bench_query
+from bench.workloads.targets import pick_targets
+
+
+@dataclass
+class Cell:
+    ontology: str
+    workload: str
+    backend: str | None
+    reasoner: str
+    relation: str | None
+    construct: bool | None
+    target: str | None
+    measurement: dict | None = None
+    error: str | None = None
+    skipped_reason: str | None = None
+
+
+def _env_header() -> dict:
+    import platform
+    return {
+        "host": socket.gethostname(),
+        "platform": platform.platform(),
+        "python": sys.version.split()[0],
+        "pymos_sha": _git_sha(),
+        "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
+        "cpu_count": os.cpu_count(),
+    }
+
+
+def _git_sha() -> str:
+    import subprocess
+    try:
+        return subprocess.run(
+            ["git", "rev-parse", "HEAD"], capture_output=True, text=True, check=True,
+        ).stdout.strip()[:12]
+    except Exception:
+        return "unknown"
+
+
+def _entry(name: str) -> CorpusEntry:
+    for e in CORPUS:
+        if e.name == name:
+            return e
+    raise KeyError(f"unknown ontology: {name}")
+
+
+def _resolve_omn(name: str) -> Path:
+    """Path to the ontology .omn — download if needed unless BENCH_DATA_DIR
+    already has it (covers the test fast-path)."""
+    e = _entry(name)
+    p = cached_omn_path(e)
+    if p.exists():
+        return p
+    return download_one(e)
+
+
+def run_snapshot(
+    *,
+    out_dir: Path,
+    ontologies: list[str],
+    backends: list[str],
+    reasoners: list[str],
+    relations: Iterable[str] = ("super", "sub", "direct_super", "direct_sub", "equiv", "individual"),
+    construct_modes: Iterable[bool] = (True, False),
+    targets_per_ontology: int = 3,
+    hot_iters: int = 3,
+    warmup: int = 1,
+) -> Path:
+    out_dir = Path(out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    cells: list[Cell] = []
+
+    for onto_name in ontologies:
+        omn = _resolve_omn(onto_name)
+        cells.append(Cell(
+            ontology=onto_name, workload="parse",
+            backend=None, reasoner="none", relation=None, construct=None, target=None,
+            measurement=bench_parse(str(omn), hot_iters=hot_iters, warmup=warmup).to_dict(),
+        ))
+        cells.append(Cell(
+            ontology=onto_name, workload="render",
+            backend=None, reasoner="none", relation=None, construct=None, target=None,
+            measurement=bench_render(str(omn), hot_iters=hot_iters, warmup=warmup).to_dict(),
+        ))
+
+        onto = pymos.parse(omn.read_text())
+        targets = pick_targets(onto, k=targets_per_ontology)
+
+        for backend_name in backends:
+            for reasoner_name in reasoners:
+                for construct in construct_modes:
+                    if construct and backend_name.startswith("owlready2"):
+                        for relation in relations:
+                            for target in targets:
+                                cells.append(Cell(
+                                    ontology=onto_name, workload="query",
+                                    backend=backend_name, reasoner=reasoner_name,
+                                    relation=relation, construct=construct, target=target,
+                                    skipped_reason="owlready2 SPARQL engine does not support CONSTRUCT",
+                                ))
+                        continue
+                    for relation in relations:
+                        for target in targets:
+                            try:
+                                m = bench_query(
+                                    onto_path=str(omn),
+                                    backend_name=backend_name,
+                                    target_iri=target,
+                                    relation=relation,
+                                    construct=construct,
+                                    hot_iters=hot_iters,
+                                    warmup=warmup,
+                                )
+                                cells.append(Cell(
+                                    ontology=onto_name, workload="query",
+                                    backend=backend_name, reasoner=reasoner_name,
+                                    relation=relation, construct=construct, target=target,
+                                    measurement=m.to_dict(),
+                                ))
+                            except Exception as exc:
+                                cells.append(Cell(
+                                    ontology=onto_name, workload="query",
+                                    backend=backend_name, reasoner=reasoner_name,
+                                    relation=relation, construct=construct, target=target,
+                                    error=f"{type(exc).__name__}: {exc}",
+                                ))
+
+    payload = {"env": _env_header(), "cells": [asdict(c) for c in cells]}
+    (out_dir / "results.json").write_text(json.dumps(payload, indent=2))
+
+    with (out_dir / "results.csv").open("w", newline="") as f:
+        w = csv.writer(f)
+        w.writerow(["ontology", "workload", "backend", "reasoner",
+                    "relation", "construct", "target", "wall_cold",
+                    "wall_hot_median", "peak_rss_bytes", "error", "skipped_reason"])
+        for c in cells:
+            m = c.measurement or {}
+            w.writerow([c.ontology, c.workload, c.backend, c.reasoner,
+                        c.relation, c.construct, c.target,
+                        m.get("wall_cold"), m.get("wall_hot_median"),
+                        m.get("peak_rss_bytes"), c.error, c.skipped_reason])
+
+    return out_dir / "results.json"
+
+
+def _cli():
+    import argparse, datetime as dt
+    p = argparse.ArgumentParser(description="pymos perf snapshot runner")
+    p.add_argument("--tier", default="tiny",
+                   help="comma-separated tiers (tiny,small,medium,large,huge) or 'all'")
+    p.add_argument("--backends", default="pyoxigraph_mem,owlready2_mem",
+                   help="comma-separated backend names")
+    p.add_argument("--reasoners", default="none,owlrl",
+                   help="comma-separated reasoner names")
+    p.add_argument("--relations", default="super,sub,direct_super,direct_sub,equiv,individual")
+    p.add_argument("--targets-per-ontology", type=int, default=3)
+    p.add_argument("--hot-iters", type=int, default=3)
+    p.add_argument("--warmup", type=int, default=1)
+    p.add_argument("--out", type=Path,
+                   default=Path(f"bench/results/{dt.date.today().isoformat()}-run"))
+    p.add_argument("--report-md", type=Path,
+                   default=Path(f"docs/perf-{dt.date.today().isoformat()}-pymos-bench.md"))
+    args = p.parse_args()
+
+    if args.tier == "all":
+        ontos = [e.name for e in CORPUS]
+    else:
+        wanted = set(args.tier.split(","))
+        ontos = [e.name for e in CORPUS if e.tier in wanted]
+
+    results_json = run_snapshot(
+        out_dir=args.out,
+        ontologies=ontos,
+        backends=args.backends.split(","),
+        reasoners=args.reasoners.split(","),
+        relations=tuple(args.relations.split(",")),
+        targets_per_ontology=args.targets_per_ontology,
+        hot_iters=args.hot_iters,
+        warmup=args.warmup,
+    )
+
+    from bench.runners.plots import write_scaling_plots
+    from bench.runners.report import write_report
+    from bench.reasoners.floors import measure_wrapper_floors
+
+    write_scaling_plots(results_json, args.out / "plots")
+    floors = measure_wrapper_floors(include_docker=False)
+    write_report(results_json, args.report_md, floors=floors)
+    print(f"results: {results_json}")
+    print(f"report : {args.report_md}")
+
+
+if __name__ == "__main__":
+    _cli()
