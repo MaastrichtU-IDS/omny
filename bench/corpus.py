@@ -28,16 +28,16 @@ CORPUS: tuple[CorpusEntry, ...] = (
         notes="Manchester / Protege pizza tutorial ontology",
     ),
     CorpusEntry(
-        name="wine", tier="tiny",
-        url="https://www.w3.org/TR/owl-guide/wine.rdf",
-        sha256="skip-checksum", approx_axioms=700, fmt="rdfxml",
-        notes="W3C OWL Guide wine example",
+        name="koala", tier="tiny",
+        url="https://protege.stanford.edu/ontologies/koala.owl",
+        sha256="skip-checksum", approx_axioms=50, fmt="rdfxml",
+        notes="Protege koala tutorial ontology (replaces wine: W3C wine.rdf caused ROBOT import-hang)",
     ),
     CorpusEntry(
-        name="family", tier="tiny",
-        url="https://raw.githubusercontent.com/owlcs/owlapi/version5/contract/src/test/resources/family.owl",
+        name="travel", tier="tiny",
+        url="https://protege.stanford.edu/ontologies/travel.owl",
         sha256="skip-checksum", approx_axioms=150, fmt="rdfxml",
-        notes="OWL-API family.owl test fixture",
+        notes="Protege travel tutorial ontology (replaces family: owlapi family.owl 404)",
     ),
     # Small tier
     CorpusEntry(
@@ -47,8 +47,9 @@ CORPUS: tuple[CorpusEntry, ...] = (
     ),
     CorpusEntry(
         name="obi-core", tier="small",
-        url="http://purl.obolibrary.org/obo/obi/dev/obi.owl",
+        url="https://raw.githubusercontent.com/obi-ontology/obi/master/obi.owl",
         sha256="skip-checksum", approx_axioms=5_000, fmt="rdfxml",
+        notes="OBI main release (was: obi/dev/obi.owl returned 404)",
     ),
     CorpusEntry(
         name="doid", tier="small",
