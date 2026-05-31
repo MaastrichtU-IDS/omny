@@ -252,7 +252,10 @@ class FrameLoader:
             block = body[m.end(): end].strip()
             operands = self._split_commas(block)
             if operands:
-                sections[keyword] = operands
+                # Repeated axiom keywords inside a frame are concatenated, not
+                # overwritten — e.g. two ``SubClassOf:`` lines on the same Class
+                # must both contribute to ``cls.is_a``.
+                sections.setdefault(keyword, []).extend(operands)
 
         # Warn about lines that look like "Keyword: ..." but aren't in the known set.
         # Uses a \w+-only match so prefixed names like "rdfs:label" are not flagged.

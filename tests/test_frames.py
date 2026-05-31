@@ -280,3 +280,23 @@ def test_import_recorded_without_fetch():
     onto = parse(doc)
     imported_iris = {o.base_iri.rstrip("#/") for o in onto.imported_ontologies}
     assert "http://other.org/imported" in imported_iris
+
+
+def test_repeated_axiom_keyword_concatenates():
+    """Multiple lines of the same axiom keyword inside one frame must all
+    contribute, not overwrite. Regression: ``Class: C
+        SubClassOf: A
+        SubClassOf: B`` used to drop the first SubClassOf."""
+    doc = """
+    Prefix: : <http://ex.org/>
+    Class: MyPizza
+        SubClassOf: Pizza
+        SubClassOf: hasTopping some Cheese
+    """
+    onto = parse(doc)
+    my = onto.world["http://ex.org/MyPizza"]
+    pizza = onto.world["http://ex.org/Pizza"]
+    assert pizza in my.is_a, "first SubClassOf was dropped"
+    # And the restriction is still applied
+    assert any(getattr(sc, "type", None) == owlready2.SOME for sc in my.is_a), \
+        "restriction SubClassOf was dropped"
