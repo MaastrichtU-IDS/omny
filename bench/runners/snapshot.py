@@ -93,21 +93,57 @@ def run_snapshot(
 
     cells: list[Cell] = []
 
-    for onto_name in ontologies:
-        omn = _resolve_omn(onto_name)
-        cells.append(Cell(
-            ontology=onto_name, workload="parse",
-            backend=None, reasoner="none", relation=None, construct=None, target=None,
-            measurement=bench_parse(str(omn), hot_iters=hot_iters, warmup=warmup).to_dict(),
-        ))
-        cells.append(Cell(
-            ontology=onto_name, workload="render",
-            backend=None, reasoner="none", relation=None, construct=None, target=None,
-            measurement=bench_render(str(omn), hot_iters=hot_iters, warmup=warmup).to_dict(),
-        ))
+    def _err_cell(workload: str, exc: BaseException, *,
+                  backend=None, reasoner="none", relation=None,
+                  construct=None, target=None) -> Cell:
+        return Cell(
+            ontology=onto_name, workload=workload,
+            backend=backend, reasoner=reasoner, relation=relation,
+            construct=construct, target=target,
+            error=f"{type(exc).__name__}: {exc}",
+        )
 
-        onto = pymos.parse(omn.read_text())
-        targets = pick_targets(onto, k=targets_per_ontology)
+    for onto_name in ontologies:
+        # Resolve the .omn (may need download + ROBOT convert).
+        try:
+            omn = _resolve_omn(onto_name)
+        except Exception as exc:
+            cells.append(_err_cell("resolve", exc))
+            continue  # cannot run any workload without the .omn
+
+        # Parse workload — non-blocking: a failure here is recorded and we
+        # move on, since render/query each open the file themselves.
+        try:
+            parse_m = bench_parse(str(omn), hot_iters=hot_iters, warmup=warmup).to_dict()
+            cells.append(Cell(
+                ontology=onto_name, workload="parse",
+                backend=None, reasoner="none", relation=None, construct=None, target=None,
+                measurement=parse_m,
+            ))
+        except Exception as exc:
+            cells.append(_err_cell("parse", exc))
+
+        # Render workload — non-blocking too.
+        try:
+            render_m = bench_render(str(omn), hot_iters=hot_iters, warmup=warmup).to_dict()
+            cells.append(Cell(
+                ontology=onto_name, workload="render",
+                backend=None, reasoner="none", relation=None, construct=None, target=None,
+                measurement=render_m,
+            ))
+        except Exception as exc:
+            cells.append(_err_cell("render", exc))
+
+        # Target picking — needed for the query loop. If pymos.parse() or
+        # pick_targets() raise (e.g. ontology has zero classes), record the
+        # failure once and skip the query matrix for this ontology rather
+        # than emit N empty rows.
+        try:
+            onto = pymos.parse(omn.read_text())
+            targets = pick_targets(onto, k=targets_per_ontology)
+        except Exception as exc:
+            cells.append(_err_cell("target_pick", exc))
+            continue
 
         for backend_name in backends:
             for reasoner_name in reasoners:
