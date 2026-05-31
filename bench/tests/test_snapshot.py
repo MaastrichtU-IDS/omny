@@ -34,6 +34,49 @@ def test_snapshot_pizza_no_reasoner_pyoxigraph_only(tmp_path, monkeypatch):
     assert "wall_cold" in qc["measurement"]
 
 
+def test_snapshot_records_render_failure_and_continues(tmp_path, monkeypatch):
+    """A failing ``bench_render`` must record an ``error`` row, not abort the run.
+
+    Before this guard, a per-cell render crash (e.g. an ``IncompleteParseError``
+    from a real-world ontology) propagated up through ``run_snapshot`` and
+    aborted before any results were written. The query workload — which is
+    independent of render — was never reached. See snapshot 2026-05-31.
+    """
+    import bench.runners.snapshot as snap
+
+    monkeypatch.setenv("BENCH_DATA_DIR", str(tmp_path))
+    pizza_src = Path(__file__).resolve().parents[2] / "tests" / "data" / "pizza.omn"
+    (tmp_path / "pizza.omn").write_text(pizza_src.read_text())
+
+    def _boom(*a, **k):
+        raise RuntimeError("simulated render failure")
+    monkeypatch.setattr(snap, "bench_render", _boom)
+
+    out_dir = tmp_path / "run"
+    run_snapshot(
+        out_dir=out_dir,
+        ontologies=["pizza"],
+        backends=["pyoxigraph_mem"],
+        reasoners=["none"],
+        relations=("super",),
+        construct_modes=(True,),
+        targets_per_ontology=1,
+        hot_iters=1,
+        warmup=0,
+    )
+    results = json.loads((out_dir / "results.json").read_text())
+    by_workload = {c["workload"]: c for c in results["cells"]}
+
+    # Render row exists and carries the error
+    assert "render" in by_workload
+    assert "simulated render failure" in by_workload["render"]["error"]
+
+    # And the run continued — parse + query both have measurements
+    assert by_workload["parse"]["measurement"] is not None
+    assert any(c["workload"] == "query" and c.get("measurement") for c in results["cells"]), \
+        "query workload must still run when render fails"
+
+
 from bench.runners.plots import write_scaling_plots
 
 
