@@ -8,32 +8,63 @@ builder for class-relation retrieval.  No Java required.
 
 ## Quick taste
 
+A small ontology with a class hierarchy + an anonymous class expression
+demonstrates the three things pymos is for, end to end: **round-trip**
+(parse → render → re-parse with no loss), **query** the asserted graph,
+and **query again after a pure-Python reasoner** has materialised the
+inferences.
+
 ```python
 import pymos
-from pymos import class_relations_query
 from pymos.store import run_rdflib
+import rdflib, owlrl  # `pip install pymos[reasoning]` for owlrl
 
 onto = pymos.parse("""
 Prefix: : <http://example.org/>
+
 Class: Food
+Class: Cheese
 Class: Pizza        SubClassOf: Food
-Class: Margherita   SubClassOf: Pizza
-Class: Capricciosa  SubClassOf: Pizza
+Class: Margherita
+    SubClassOf: Pizza, hasTopping some Cheese
+
+ObjectProperty: hasTopping
+
+Individual: mozz    Types: Cheese
+Individual: myPie
+    Types: Margherita
+    Facts: hasTopping mozz
 """)
 
-q = class_relations_query("<http://example.org/Pizza>", relations=("sub",),
-                          construct=False)
-graph = onto.world.as_rdflib_graph()
-for row in run_rdflib(q, graph):
-    print(row[0])
-# http://example.org/Margherita
-# http://example.org/Capricciosa
+# 1) Round-trip: render the ontology, re-parse the result, render again —
+#    same bytes.  The class hierarchy AND the anonymous restriction
+#    (`hasTopping some Cheese`) survive cleanly.
+text = pymos.render(onto)
+assert pymos.render(pymos.parse(text)) == text
+print(f"round-trip OK ({len(text.splitlines())} lines, idempotent).")
+
+# 2) Without reasoning — only what the document literally asserts.
+q = pymos.class_relations_query("<http://example.org/Food>",
+                                relations=("individual",), construct=False)
+asserted = onto.world.as_rdflib_graph()
+print("Food individuals (asserted):",
+      sorted(str(r[0]) for r in run_rdflib(q, asserted)))
+# Food individuals (asserted): []
+
+# 3) Same SPARQL, after a pure-Python OWL 2 RL reasoner has materialised
+#    subsumption (myPie a Margherita → ... → Food).  No Java needed.
+reasoned = rdflib.Graph()
+reasoned.parse(data=asserted.serialize(format="turtle"), format="turtle")
+owlrl.DeductiveClosure(owlrl.OWLRL_Semantics).expand(reasoned)
+print("Food individuals (reasoned):",
+      sorted(str(r[0]) for r in run_rdflib(q, reasoned)))
+# Food individuals (reasoned): ['http://example.org/myPie']
 ```
 
-That's the whole loop: a Manchester string in, a SPARQL string built for you,
-results out — with no Java, no native build, and no ad-hoc OWL object model
-to learn (the parsed value is a plain [owlready2 Ontology](
-https://owlready2.readthedocs.io/)).
+The parsed value is a plain [owlready2 Ontology](
+https://owlready2.readthedocs.io/), so the full owlready2 Python API
+(class hierarchy, axioms, instances, characteristics) applies — pymos
+adds no separate object model to learn.
 
 ## Why pymos?
 
