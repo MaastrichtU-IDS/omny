@@ -2,3 +2,17 @@ pymos includes a Manchester OWL Syntax PEG grammar and test fixtures derived
 from owlapy (https://github.com/dice-group/owlapy), licensed under the MIT License,
 Copyright (c) 2024 Caglar Demir. The original MIT license text is reproduced in
 licenses/owlapy-LICENSE.txt.
+
+Grammar policy
+--------------
+pymos/grammar.py was originally vendored verbatim from owlapy. One intentional
+divergence has been introduced and is recorded here:
+
+  * Facet-restriction separator (PR #15): the upstream owlapy grammar used the
+    DL connector ``⊓`` between facet restrictions. The W3C OWL 2 Manchester
+    syntax specifies ``,`` instead, and real-world ontologies (e.g. SIO,
+    OBI) use ``,``. pymos accepts both. See
+    https://www.w3.org/TR/owl2-manchester-syntax/#Datatype_Restrictions
+
+Future divergences from upstream must be recorded in this section so the
+"vendored verbatim" claim stays accurate.
