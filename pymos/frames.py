@@ -297,24 +297,23 @@ class FrameLoader:
 
     @staticmethod
     def _append_property_value(entity, prop, value) -> None:
-        """Add `value` to `entity.<prop>` while respecting owlready2's storage shape.
+        """Add ``value`` to ``prop[entity]`` (the IRI-keyed list view).
 
-        owlready2 stores values of a ``FunctionalProperty`` as a *scalar* (and
-        ``getattr`` returns ``None`` when unset); for any other property the value
-        is a list (``getattr`` returns ``[]`` when unset). Naively doing
-        ``getattr(entity, name, []) + [value]`` therefore crashes on Functional
-        properties — the default kicks in only for missing attributes, not for
-        attributes whose value is ``None``.
+        Why ``prop[entity]`` instead of ``getattr/setattr(entity, name, …)``?
+        owlready2's Python attribute name for a property is the **local part**
+        of its IRI. Two distinct properties whose IRIs differ only in
+        namespace (e.g. ``rdfs:comment`` and ``schema.org#comment``) end up
+        aliasing the same attribute ``entity.comment``. Round-tripping a
+        rendered ontology would then store both properties' values in the
+        same list, doubling them on every parse/render cycle (sio.omn:
+        10 512 → 14 633 → 22 875 annotation pairs across three rounds).
+        ``prop[entity]`` is a property-keyed view that stays isolated.
+
+        FunctionalProperty values are stored as a scalar via the attribute
+        API in owlready2; ``prop[entity].append`` accepts list-like
+        semantics for both functional and non-functional properties.
         """
-        name = getattr(prop, "python_name", None) or prop.name
-        if owlready2.FunctionalProperty in prop.is_a:
-            setattr(entity, name, value)
-            return
-        current = getattr(entity, name, None)
-        if current is None:
-            setattr(entity, name, [value])
-        else:
-            current.append(value)
+        prop[entity].append(value)
 
     _CHARS = {
         "Functional": owlready2.FunctionalProperty,

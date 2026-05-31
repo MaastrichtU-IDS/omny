@@ -300,3 +300,58 @@ def test_repeated_axiom_keyword_concatenates():
     # And the restriction is still applied
     assert any(getattr(sc, "type", None) == owlready2.SOME for sc in my.is_a), \
         "restriction SubClassOf was dropped"
+
+
+def test_annotation_properties_with_same_local_name_do_not_collide():
+    """Distinct annotation properties whose IRIs share a local name (e.g.
+    ``rdfs:comment`` and ``schema.org/comment`` both alias ``entity.comment``)
+    must be stored independently. Pre-fix, ``_append_property_value`` used
+    ``setattr(entity, "comment", ...)`` which routed both values into the
+    same list, and round-tripping a rendered ontology would duplicate every
+    such pair on each cycle (sio.omn: 10 512 → 14 633 → 22 875 annotation
+    pairs across three rounds).
+    """
+    doc = """
+    Prefix: : <http://ex.org/>
+    AnnotationProperty: <http://www.w3.org/2000/01/rdf-schema#comment>
+    AnnotationProperty: <http://schema.org/comment>
+    Class: A
+        Annotations: <http://www.w3.org/2000/01/rdf-schema#comment> "rdfs side",
+                     <http://schema.org/comment> "schema side"
+    """
+    onto = parse(doc)
+    A = onto.world["http://ex.org/A"]
+    rdfs_comment = onto.world["http://www.w3.org/2000/01/rdf-schema#comment"]
+    schema_comment = onto.world["http://schema.org/comment"]
+    # Each property carries exactly its own value — no cross-pollination.
+    assert list(rdfs_comment[A]) == ["rdfs side"]
+    assert list(schema_comment[A]) == ["schema side"]
+
+
+def test_round_trip_does_not_duplicate_annotations():
+    """Parse → render → parse → render must reach a fixed point (idempotent
+    from the second render onward), not grow each cycle."""
+    import pymos
+    doc = """
+    Prefix: : <http://ex.org/>
+    AnnotationProperty: <http://www.w3.org/2000/01/rdf-schema#comment>
+    AnnotationProperty: <http://schema.org/comment>
+    AnnotationProperty: <http://purl.org/dc/elements/1.1/description>
+    AnnotationProperty: <http://purl.org/dc/terms/description>
+    Class: A
+        Annotations: <http://www.w3.org/2000/01/rdf-schema#comment> "rdfs c",
+                     <http://schema.org/comment> "schema c",
+                     <http://purl.org/dc/elements/1.1/description> "dc d",
+                     <http://purl.org/dc/terms/description> "terms d"
+    """
+    o1 = pymos.parse(doc)
+    r1 = pymos.render(o1)
+    o2 = pymos.parse(r1)
+    r2 = pymos.render(o2)
+    o3 = pymos.parse(r2)
+    r3 = pymos.render(o3)
+    # The renderer reaches a fixed point — neither round-trip duplicates.
+    assert r2 == r3
+    # And the second pass's annotation count isn't bigger than the first's.
+    assert r2.count("Annotations:") == r1.count("Annotations:")
+    assert r2.count("comment") <= r1.count("comment") * 2  # nothing exponential
