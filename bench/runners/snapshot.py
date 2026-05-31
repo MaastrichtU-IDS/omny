@@ -93,6 +93,17 @@ def run_snapshot(
 
     cells: list[Cell] = []
 
+    # Compute the env header once so every flush reuses it (a git-sha lookup
+    # spawns a subprocess; doing it per cell would dominate the snapshot cost).
+    env_header = _env_header()
+
+    def _add(cell: Cell) -> None:
+        """Append a cell and flush results.{json,csv} so that a timeout or
+        crash mid-run preserves everything completed so far. The write is
+        atomic per file (temp + rename on the same filesystem)."""
+        cells.append(cell)
+        _flush_results(out_dir, env_header, cells)
+
     def _err_cell(workload: str, exc: BaseException, *,
                   backend=None, reasoner="none", relation=None,
                   construct=None, target=None) -> Cell:
@@ -108,31 +119,31 @@ def run_snapshot(
         try:
             omn = _resolve_omn(onto_name)
         except Exception as exc:
-            cells.append(_err_cell("resolve", exc))
+            _add(_err_cell("resolve", exc))
             continue  # cannot run any workload without the .omn
 
         # Parse workload — non-blocking: a failure here is recorded and we
         # move on, since render/query each open the file themselves.
         try:
             parse_m = bench_parse(str(omn), hot_iters=hot_iters, warmup=warmup).to_dict()
-            cells.append(Cell(
+            _add(Cell(
                 ontology=onto_name, workload="parse",
                 backend=None, reasoner="none", relation=None, construct=None, target=None,
                 measurement=parse_m,
             ))
         except Exception as exc:
-            cells.append(_err_cell("parse", exc))
+            _add(_err_cell("parse", exc))
 
         # Render workload — non-blocking too.
         try:
             render_m = bench_render(str(omn), hot_iters=hot_iters, warmup=warmup).to_dict()
-            cells.append(Cell(
+            _add(Cell(
                 ontology=onto_name, workload="render",
                 backend=None, reasoner="none", relation=None, construct=None, target=None,
                 measurement=render_m,
             ))
         except Exception as exc:
-            cells.append(_err_cell("render", exc))
+            _add(_err_cell("render", exc))
 
         # Target picking — needed for the query loop. If pymos.parse() or
         # pick_targets() raise (e.g. ontology has zero classes), record the
@@ -142,7 +153,7 @@ def run_snapshot(
             onto = pymos.parse(omn.read_text())
             targets = pick_targets(onto, k=targets_per_ontology)
         except Exception as exc:
-            cells.append(_err_cell("target_pick", exc))
+            _add(_err_cell("target_pick", exc))
             continue
 
         for backend_name in backends:
@@ -151,7 +162,7 @@ def run_snapshot(
                     if construct and backend_name.startswith("owlready2"):
                         for relation in relations:
                             for target in targets:
-                                cells.append(Cell(
+                                _add(Cell(
                                     ontology=onto_name, workload="query",
                                     backend=backend_name, reasoner=reasoner_name,
                                     relation=relation, construct=construct, target=target,
@@ -170,36 +181,63 @@ def run_snapshot(
                                     hot_iters=hot_iters,
                                     warmup=warmup,
                                 )
-                                cells.append(Cell(
+                                _add(Cell(
                                     ontology=onto_name, workload="query",
                                     backend=backend_name, reasoner=reasoner_name,
                                     relation=relation, construct=construct, target=target,
                                     measurement=m.to_dict(),
                                 ))
                             except Exception as exc:
-                                cells.append(Cell(
+                                _add(Cell(
                                     ontology=onto_name, workload="query",
                                     backend=backend_name, reasoner=reasoner_name,
                                     relation=relation, construct=construct, target=target,
                                     error=f"{type(exc).__name__}: {exc}",
                                 ))
 
-    payload = {"env": _env_header(), "cells": [asdict(c) for c in cells]}
-    (out_dir / "results.json").write_text(json.dumps(payload, indent=2))
+    # Final flush is implicit in _add — every appended cell already wrote to
+    # disk. The redundant call here is a no-op safety net for runs with zero
+    # cells (e.g. all ontologies failed at _resolve_omn) so the empty results
+    # files still exist.
+    if not cells:
+        _flush_results(out_dir, env_header, cells)
 
-    with (out_dir / "results.csv").open("w", newline="") as f:
+    return out_dir / "results.json"
+
+
+_CSV_HEADER = ["ontology", "workload", "backend", "reasoner",
+               "relation", "construct", "target", "wall_cold",
+               "wall_hot_median", "peak_rss_bytes", "error", "skipped_reason"]
+
+
+def _flush_results(out_dir: Path, env: dict, cells: list) -> None:
+    """Write results.{json,csv} atomically (temp + rename on same fs).
+
+    Called after every appended cell so that a timeout, crash, or Ctrl-C
+    mid-run preserves everything completed so far. Both files are
+    written via a sibling ``.tmp`` and ``os.replace``-d into place; the
+    replacement is atomic per file on POSIX/NTFS (no half-written file
+    ever observable to a concurrent reader).
+    """
+    json_path = out_dir / "results.json"
+    csv_path = out_dir / "results.csv"
+
+    json_tmp = json_path.with_suffix(json_path.suffix + ".tmp")
+    payload = {"env": env, "cells": [asdict(c) for c in cells]}
+    json_tmp.write_text(json.dumps(payload, indent=2))
+    os.replace(json_tmp, json_path)
+
+    csv_tmp = csv_path.with_suffix(csv_path.suffix + ".tmp")
+    with csv_tmp.open("w", newline="") as f:
         w = csv.writer(f)
-        w.writerow(["ontology", "workload", "backend", "reasoner",
-                    "relation", "construct", "target", "wall_cold",
-                    "wall_hot_median", "peak_rss_bytes", "error", "skipped_reason"])
+        w.writerow(_CSV_HEADER)
         for c in cells:
             m = c.measurement or {}
             w.writerow([c.ontology, c.workload, c.backend, c.reasoner,
                         c.relation, c.construct, c.target,
                         m.get("wall_cold"), m.get("wall_hot_median"),
                         m.get("peak_rss_bytes"), c.error, c.skipped_reason])
-
-    return out_dir / "results.json"
+    os.replace(csv_tmp, csv_path)
 
 
 def _cli():
