@@ -12,8 +12,17 @@ _PREFIX_RE = re.compile(r"^\s*Prefix:\s*(\w*):\s*<([^>]+)>", re.M)
 _ONTOLOGY_RE = re.compile(r"^\s*Ontology:\s*<([^>]+)>", re.M)
 _IMPORT_RE = re.compile(r"^\s*Import:\s*<([^>]+)>", re.M)
 
+# Per W3C OWL2 Manchester syntax, "misc" axiom keywords appear at the document
+# level (not inside a frame). They take a comma-separated list of operands.
+_MISC_KEYWORDS = (
+    "EquivalentClasses", "DisjointClasses",
+    "EquivalentProperties", "DisjointProperties",
+    "SameIndividual", "DifferentIndividuals",
+)
+
 _FRAME_RE = re.compile(
-    r"^\s*(Class|ObjectProperty|DataProperty|Individual|Datatype|AnnotationProperty):",
+    r"^\s*(Class|ObjectProperty|DataProperty|Individual|Datatype|AnnotationProperty|"
+    + "|".join(_MISC_KEYWORDS) + r"):",
     re.M,
 )
 
@@ -21,7 +30,7 @@ _FRAME_RE = re.compile(
 _AXIOM_KEYWORDS = (
     "SubClassOf", "EquivalentTo", "DisjointWith", "Domain", "Range",
     "Characteristics", "SubPropertyOf", "InverseOf", "Types", "Facts",
-    "SameAs", "DifferentFrom", "Annotations",
+    "SameAs", "DifferentFrom", "Annotations", "HasKey",
 )
 _SECTION_RE = re.compile(
     r"^\s*(" + "|".join(_AXIOM_KEYWORDS) + r"):",
@@ -34,6 +43,7 @@ _FRAME_KEYWORDS = frozenset({
     "Class", "ObjectProperty", "DataProperty", "Individual",
     "Datatype", "AnnotationProperty",
     "Prefix", "Ontology", "Import",
+    *_MISC_KEYWORDS,
 })
 _ALL_KNOWN_KEYWORDS = frozenset(_AXIOM_KEYWORDS) | _FRAME_KEYWORDS
 
@@ -95,6 +105,42 @@ def parse(text: str, onto: Optional[owlready2.Ontology] = None,
     return onto
 
 
+def _build_string_mask(text: str) -> bytearray:
+    """Return a per-character mask: 1 inside a ``"..."`` literal, 0 outside.
+
+    Tokenisers must consult this mask before treating a regex match as a real
+    frame or axiom keyword — otherwise text like ``"... November 2012, 26th: ..."``
+    inside an annotation literal can be mis-split. Recognises backslash-escaped
+    quotes (``\\"``) so the closing quote of a normal literal is detected
+    correctly.
+    """
+    mask = bytearray(len(text))
+    in_string = False
+    i = 0
+    while i < len(text):
+        ch = text[i]
+        if in_string:
+            mask[i] = 1
+            if ch == "\\" and i + 1 < len(text):
+                mask[i + 1] = 1
+                i += 2
+                continue
+            if ch == '"':
+                in_string = False
+        elif ch == '"':
+            in_string = True
+            mask[i] = 1
+        i += 1
+    return mask
+
+
+def _finditer_outside_strings(pattern, text, mask):
+    """Yield only those regex matches whose start position is outside a quoted literal."""
+    for m in pattern.finditer(text):
+        if not mask[m.start()]:
+            yield m
+
+
 class FrameLoader:
     def __init__(self, resolver: EntityResolver, parser: ManchesterParser):
         self.r = resolver
@@ -107,6 +153,12 @@ class FrameLoader:
     def load(self, text: str) -> None:
         """Parse *text* as a Manchester document and populate the ontology."""
         for frame_type, subject, body in self._split_frames(text):
+            if frame_type in _MISC_KEYWORDS:
+                # Misc axioms have no subject; `body` is "subject + body" concatenated.
+                # Rejoin them, then comma-split into operand IRIs.
+                operands = self._split_commas((subject + " " + body).strip())
+                self._handle_misc(frame_type, operands)
+                continue
             sections = self._split_sections(body)
             if frame_type == "Class":
                 self._handle_class(subject, sections)
@@ -145,8 +197,13 @@ class FrameLoader:
         Anything before the first frame keyword (preamble: Prefix/Ontology/Import
         lines) is silently skipped — prefixes have already been extracted in
         ``parse()``.
+
+        Frame keywords inside quoted annotation literals are ignored via a
+        string mask so e.g. ``rdfs:comment "...the Class: prefix..."`` does not
+        spuriously start a new frame.
         """
-        matches = list(_FRAME_RE.finditer(text))
+        mask = _build_string_mask(text)
+        matches = list(_finditer_outside_strings(_FRAME_RE, text, mask))
         frames = []
         for i, m in enumerate(matches):
             frame_type = m.group(1)
@@ -187,7 +244,8 @@ class FrameLoader:
           supported.
         """
         sections: Dict[str, List[str]] = {}
-        matches = list(_SECTION_RE.finditer(body))
+        mask = _build_string_mask(body)
+        matches = list(_finditer_outside_strings(_SECTION_RE, body, mask))
         for i, m in enumerate(matches):
             keyword = m.group(1)
             end = matches[i + 1].start() if i + 1 < len(matches) else len(body)
@@ -198,7 +256,8 @@ class FrameLoader:
 
         # Warn about lines that look like "Keyword: ..." but aren't in the known set.
         # Uses a \w+-only match so prefixed names like "rdfs:label" are not flagged.
-        for m in _CANDIDATE_KW_RE.finditer(body):
+        # Also masked: skip candidates inside quoted literals.
+        for m in _finditer_outside_strings(_CANDIDATE_KW_RE, body, mask):
             kw = m.group(1)
             if kw not in _ALL_KNOWN_KEYWORDS:
                 warnings.warn(
@@ -212,21 +271,41 @@ class FrameLoader:
 
     @staticmethod
     def _split_commas(text: str) -> List[str]:
-        """Split *text* on top-level commas (ignoring commas inside parens/braces)."""
+        """Split *text* on top-level commas, ignoring those inside parens/braces
+        **or inside ``"..."`` quoted literals**. Backslash-escaped quotes inside
+        a literal don't end the string.
+        """
         out: List[str] = []
         depth = 0
+        in_string = False
         buf = ""
-        for ch in text:
-            if ch in "({[":
+        i = 0
+        while i < len(text):
+            ch = text[i]
+            if in_string:
+                buf += ch
+                if ch == "\\" and i + 1 < len(text):
+                    buf += text[i + 1]
+                    i += 2
+                    continue
+                if ch == '"':
+                    in_string = False
+            elif ch == '"':
+                in_string = True
+                buf += ch
+            elif ch in "({[":
                 depth += 1
+                buf += ch
             elif ch in ")}]":
                 depth -= 1
-            if ch == "," and depth == 0:
+                buf += ch
+            elif ch == "," and depth == 0:
                 if buf.strip():
                     out.append(buf.strip())
                 buf = ""
             else:
                 buf += ch
+            i += 1
         if buf.strip():
             out.append(buf.strip())
         return out
@@ -391,3 +470,42 @@ class FrameLoader:
         p = self.r.world._abbreviate("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")
         o = self.r.world._abbreviate("http://www.w3.org/2000/01/rdf-schema#Datatype")
         self.r.onto._add_obj_triple_raw_spo(s, p, o)
+
+    def _handle_misc(self, misc_type: str, operands: List[str]) -> None:
+        """Handle document-level misc axioms: DisjointClasses, EquivalentClasses,
+        DisjointProperties, EquivalentProperties, SameIndividual, DifferentIndividuals.
+
+        Each takes a comma-separated list of entity references.
+        """
+        if not operands:
+            return
+        if misc_type == "EquivalentClasses":
+            classes = [self.r.get_class(o) for o in operands]
+            for c in classes[1:]:
+                if c not in classes[0].equivalent_to:
+                    classes[0].equivalent_to.append(c)
+        elif misc_type == "DisjointClasses":
+            classes = [self.r.get_class(o) for o in operands]
+            if len(classes) >= 2:
+                with self.r.onto:
+                    owlready2.AllDisjoint(classes)
+        elif misc_type == "EquivalentProperties":
+            props = [self.r.get_object_property(o) for o in operands]
+            for p in props[1:]:
+                if p not in props[0].equivalent_to:
+                    props[0].equivalent_to.append(p)
+        elif misc_type == "DisjointProperties":
+            props = [self.r.get_object_property(o) for o in operands]
+            if len(props) >= 2:
+                with self.r.onto:
+                    owlready2.AllDisjoint(props)
+        elif misc_type == "SameIndividual":
+            inds = [self.r.get_individual(o) for o in operands]
+            for i in inds[1:]:
+                if i not in inds[0].equivalent_to:
+                    inds[0].equivalent_to.append(i)
+        elif misc_type == "DifferentIndividuals":
+            inds = [self.r.get_individual(o) for o in operands]
+            if len(inds) >= 2:
+                with self.r.onto:
+                    owlready2.AllDifferent(inds)

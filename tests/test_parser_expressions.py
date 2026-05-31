@@ -110,6 +110,33 @@ def test_facet_restriction(onto):
     assert ce.value.min_inclusive == 18
 
 
+def test_facet_restriction_comma_separated(onto):
+    """Manchester syntax uses ',' between facets (per W3C OWL2 spec).
+
+    The owlapy grammar we vendored originally used '⊓' (DL syntax). Both
+    accepted now; ',' is the canonical Manchester form found in real-world
+    OBO ontologies (e.g. SIO).
+    """
+    ce = parse_expression(
+        'hasValue some xsd:double[>= "0.0"^^xsd:double, <= "1.0"^^xsd:double]',
+        onto,
+    )
+    assert isinstance(ce.value, owlready2.ConstrainedDatatype)
+    assert ce.value.min_inclusive == 0.0
+    assert ce.value.max_inclusive == 1.0
+
+
+def test_facet_restriction_intersect_separated(onto):
+    """The DL ⊓ separator stays supported for backward compatibility."""
+    ce = parse_expression(
+        "hasAge some xsd:integer[>= 18 ⊓ <= 65]",
+        onto,
+    )
+    assert isinstance(ce.value, owlready2.ConstrainedDatatype)
+    assert ce.value.min_inclusive == 18
+    assert ce.value.max_inclusive == 65
+
+
 def test_data_has_value(onto):
     ce = parse_expression('hasName value "Bob"', onto)
     assert ce.type == owlready2.VALUE

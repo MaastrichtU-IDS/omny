@@ -88,6 +88,90 @@ def test_full_pizza_document():
     onto.save(file=io.BytesIO(), format="rdfxml")
 
 
+def test_frame_tokeniser_ignores_keywords_inside_quoted_literals():
+    """A frame keyword like ``Class:`` or a prefixed name like ``26th:`` that
+    appears inside a quoted annotation literal must not be treated as a real
+    frame/axiom boundary. Regression: OBI annotations contain text such as
+    ``"Following OBI call November 2012,26th: it was decided..."`` — the
+    tokeniser must not raise ``Unknown prefix '26th'`` or warn about
+    ``it`` looking like an axiom keyword."""
+    doc = """
+    Prefix: : <http://ex.org/>
+    Prefix: rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+    Class: A
+        Annotations: rdfs:comment "Following OBI call November 2012,26th: it was decided. ObjectProperty: not really, just text."
+    Class: B
+    """
+    onto = parse(doc)
+    a = onto.world["http://ex.org/A"]
+    b = onto.world["http://ex.org/B"]
+    assert a is not None and b is not None
+    # The annotation text containing "ObjectProperty:" must NOT have
+    # been parsed as a separate frame, so B (the next real frame) is reachable.
+    assert b in list(onto.classes())
+
+
+def test_misc_axiom_disjoint_classes():
+    """Top-level ``DisjointClasses:`` is a Manchester misc axiom (no subject,
+    comma-separated class list). Regression: real OBO ontologies like SIO
+    use it heavily."""
+    doc = """
+    Prefix: : <http://ex.org/>
+    Class: A
+    Class: B
+    Class: C
+    DisjointClasses: A, B, C
+    """
+    onto = parse(doc)
+    a = onto.world["http://ex.org/A"]
+    b = onto.world["http://ex.org/B"]
+    c = onto.world["http://ex.org/C"]
+    groups = list(onto.disjoint_classes())
+    assert any(set([a, b, c]).issubset(set(g.entities)) for g in groups)
+
+
+def test_misc_axiom_different_individuals():
+    doc = """
+    Prefix: : <http://ex.org/>
+    Individual: i1
+    Individual: i2
+    Individual: i3
+    DifferentIndividuals: i1, i2, i3
+    """
+    onto = parse(doc)
+    inds = [onto.world[f"http://ex.org/i{n}"] for n in (1, 2, 3)]
+    groups = list(onto.different_individuals())
+    assert any(set(inds).issubset(set(g.entities)) for g in groups)
+
+
+def test_misc_axiom_equivalent_classes():
+    doc = """
+    Prefix: : <http://ex.org/>
+    Class: A
+    Class: B
+    EquivalentClasses: A, B
+    """
+    onto = parse(doc)
+    a = onto.world["http://ex.org/A"]
+    b = onto.world["http://ex.org/B"]
+    assert b in a.equivalent_to or a in b.equivalent_to
+
+
+def test_frame_tokeniser_handles_escaped_quotes_inside_literals():
+    doc = r"""
+    Prefix: : <http://ex.org/>
+    Prefix: rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+    Class: A
+        Annotations: rdfs:comment "He said \"Class: B is here\" but it's not really."
+    Class: C
+    """
+    onto = parse(doc)
+    assert onto.world["http://ex.org/A"] is not None
+    assert onto.world["http://ex.org/C"] is not None
+    # The fake "Class: B" inside the escaped-quote literal must not become an entity
+    assert onto.world["http://ex.org/B"] is None
+
+
 def test_facts_on_functional_object_property():
     """owlready2 stores values of FunctionalProperty as a scalar, not a list,
     so getattr returns None for an unset Functional property. The frame loader
