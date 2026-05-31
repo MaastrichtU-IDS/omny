@@ -1,5 +1,8 @@
 # Manchester OWL Syntax PEG grammar vendored from owlapy (MIT, (c) 2024 Caglar Demir).
 # See NOTICE and licenses/owlapy-LICENSE.txt. Source: owlapy/parser.py.
+# NOTE: this file is mostly verbatim. Intentional divergences from upstream are
+# recorded in NOTICE under "Grammar policy" — do not add new divergences without
+# updating that section.
 from parsimonious.grammar import Grammar
 
 # --- begin verbatim copy of owlapy MANCHESTER_GRAMMAR ---
