@@ -101,3 +101,48 @@ def test_endpoint_oxigraph_load_and_query(pizza_text):
         assert int(rows[0]["n"]) > 0
     finally:
         b.close()
+
+
+def test_pyoxigraph_sanitizer_joins_multiline_iri_and_drops_invalid():
+    """Pre-fix: owlready2 sometimes emits N-Triples with multi-line IRIs
+    (caused upstream by an unknown axiom keyword leaking into the next
+    subject — see sio.omn + SubPropertyChain). Pyoxigraph is strict and
+    rejects them, aborting the entire load. The sanitiser must
+    (a) collapse continuation lines until the terminating ``" ."`` and
+    (b) drop any line whose ``<...>`` still contains a forbidden code
+    point (whitespace, control char, etc.).
+    """
+    from bench.backends.pyoxigraph_mem import _sanitize_ntriples
+
+    raw = (
+        b'<http://ex.org/A> <http://ex.org/p> <http://ex.org/B> .\n'
+        # Two malformed sequences below — both span multiple lines and end
+        # up containing whitespace inside the IRI:
+        b'<http://ex.org/C\n'
+        b'    SubPropertyChain:\n'
+        b'        x o y> <http://ex.org/p> <http://ex.org/D> .\n'
+        # A clean line after the malformed group must still be kept:
+        b'<http://ex.org/E> <http://ex.org/p> <http://ex.org/F> .\n'
+    )
+    out = _sanitize_ntriples(raw)
+    lines = [l for l in out.split(b'\n') if l.strip()]
+    # The two valid triples survive; the malformed multi-line block is dropped.
+    assert b'<http://ex.org/A>' in out
+    assert b'<http://ex.org/E>' in out
+    # No surviving line contains the leaked Manchester text:
+    assert b'SubPropertyChain' not in out
+    assert len(lines) == 2
+
+
+def test_pyoxigraph_sanitizer_preserves_clean_input_unchanged():
+    """A well-formed N-Triples input must pass through losslessly
+    (modulo trailing newline normalisation)."""
+    from bench.backends.pyoxigraph_mem import _sanitize_ntriples
+    raw = (
+        b'<http://ex.org/A> <http://ex.org/p> <http://ex.org/B> .\n'
+        b'<http://ex.org/C> <http://ex.org/p> "literal" .\n'
+    )
+    out = _sanitize_ntriples(raw)
+    assert b'<http://ex.org/A>' in out
+    assert b'<http://ex.org/C>' in out
+    assert b'"literal"' in out
