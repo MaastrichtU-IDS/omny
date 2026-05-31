@@ -234,6 +234,113 @@ IRIs and the count of axioms per entity.
 
 ---
 
+## Usage E — Navigating the owlready2 model
+
+`pymos.parse()` returns a real **`owlready2.Ontology`**, so the full
+[owlready2 Python OWL API](https://owlready2.readthedocs.io/) applies — pymos
+adds no separate object API of its own.  Once an ontology is parsed you can
+walk the class hierarchy, inspect axioms, list instances, and read property
+characteristics directly.
+
+```python
+import pymos
+
+doc = """
+Prefix: : <http://example.org/>
+
+Class: Food
+Class: Pizza
+    SubClassOf: Food
+Class: Margherita
+    SubClassOf: Pizza
+Class: Capricciosa
+    SubClassOf: Pizza
+
+ObjectProperty: hasTopping
+    Domain: Pizza
+    Range: Food
+
+Individual: m1
+    Types: Margherita
+"""
+onto = pymos.parse(doc)
+Pizza = onto.world["http://example.org/Pizza"]
+hasT  = onto.world["http://example.org/hasTopping"]
+
+# --- class navigation ---
+Pizza.is_a               # [owl.Thing, example.org.Food] (direct supers + restrictions)
+list(Pizza.subclasses())  # [Margherita, Capricciosa] (direct only)
+list(Pizza.descendants()) # [Pizza, Margherita, Capricciosa] (incl. self, transitive)
+list(Pizza.ancestors())   # [Pizza, owl.Thing, Food] (incl. self, transitive)
+Pizza.equivalent_to       # equivalent classes (writable list)
+list(Pizza.instances())   # [m1] — direct instances (no reasoning)
+
+# --- property navigation ---
+list(hasT.domain)   # [Pizza]
+list(hasT.range)    # [Food]
+hasT.is_a           # superproperties + characteristic mixins
+
+# --- individuals carry their own attribute accessors ---
+m1 = onto.world["http://example.org/m1"]
+m1.is_a               # [owl.Thing, Margherita]
+type(m1).__name__     # 'Margherita'   (owlready2 maps individuals to their Python class)
+```
+
+**No reasoning runs by default.** `.descendants()` / `.ancestors()` /
+`.instances()` walk only **asserted** axioms.  To pick up inferred relations,
+materialise them first — see *Reasoning* below and notebook
+`examples/notebooks/06_reasoning.ipynb`.
+
+---
+
+## Reasoning
+
+pymos itself is reasoner-free, but the owlready2 ontology it returns can be
+fed to any reasoner that integrates with owlready2 or with an RDF graph:
+
+| Reasoner | Profile | Wrapper | Java? |
+|---|---|---|---|
+| `owlrl` | OWL 2 RL | pure-Python (rdflib) | no |
+| `HermiT` / `Pellet` | OWL 2 DL | owlready2 + JPype bridge | yes |
+| `HermiT` / `JFact` / `ELK` | DL / EL | ROBOT docker (`robot reason`) | yes (docker) |
+| `Konclude` | OWL 2 DL | konclude docker | no JVM (C++) |
+
+The simplest pattern uses **owlrl** in-process — pure Python, no Java:
+
+```python
+import io, pymos, owlrl, rdflib
+
+onto = pymos.parse(open("ontology.omn").read())
+
+# owlready2 → rdflib graph → expand under OWL 2 RL semantics
+buf = io.BytesIO(); onto.save(file=buf, format="ntriples")
+g = rdflib.Graph(); g.parse(data=buf.getvalue(), format="nt")
+owlrl.DeductiveClosure(owlrl.OWLRL_Semantics).expand(g)
+
+# Query the saturated graph with the same pymos.class_relations_query
+from pymos import class_relations_query
+from pymos.store import run_rdflib
+q = class_relations_query("<http://example.org/Pizza>", relations=("sub",))
+inferred = run_rdflib(q, g)
+```
+
+For DL reasoning use owlready2's `sync_reasoner_hermit()` (requires a JDK):
+
+```python
+import owlready2
+
+with onto:
+    owlready2.sync_reasoner_hermit(infer_property_values=True)
+
+# Now Pizza.descendants() / .equivalent_to / .is_a reflect HermiT inferences.
+```
+
+See `examples/notebooks/06_reasoning.ipynb` for a runnable walk-through that
+compares the asserted graph against owlrl + HermiT materialisations on the
+same ontology.
+
+---
+
 ## Relation table
 
 | Relation | Semantics |
