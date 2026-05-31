@@ -67,11 +67,23 @@ _FACET_REV = {
 _XSD_PY = {int: "xsd:integer", float: "xsd:double", str: "xsd:string", bool: "xsd:boolean"}
 
 
+def _escape_str(s: str) -> str:
+    """Escape a string for Manchester ``quoted_string`` syntax.
+
+    The grammar accepts ``\\\\`` (escaped backslash) and ``\\"`` (escaped quote)
+    inside double-quoted literals (see the ``quoted_string`` rule). A raw ``"``
+    or ``\\`` in ``s`` would otherwise terminate the literal early or be
+    consumed as the start of a different escape, breaking the parser's
+    frame/section boundaries.
+    """
+    return s.replace("\\", "\\\\").replace('"', '\\"')
+
+
 def _render_literal(value) -> str:
     if isinstance(value, bool):
         return "true" if value else "false"
     if isinstance(value, str):
-        return f'"{value}"'
+        return f'"{_escape_str(value)}"'
     return repr(value)
 
 

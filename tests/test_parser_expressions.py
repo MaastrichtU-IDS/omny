@@ -143,6 +143,20 @@ def test_data_has_value(onto):
     assert ce.value == "Bob"
 
 
+def test_quoted_string_unescapes_double_quote(onto):
+    # Regression: parser must unescape ``\"`` so values round-trip with the
+    # renderer's ``\\"``-emitting escape. Without this, sio.omn's annotation
+    # values broke the frame splitter and triggered an inheritance cycle.
+    ce = parse_expression(r'hasName value "say \"hi\""', onto)
+    assert ce.type == owlready2.VALUE
+    assert ce.value == 'say "hi"'
+
+
+def test_quoted_string_unescapes_backslash(onto):
+    ce = parse_expression(r'hasPath value "a\\b"', onto)
+    assert ce.value == r"a\b"
+
+
 def test_inverse_has_self(onto):
     ce = parse_expression("inverse hasTopping Self", onto)
     assert ce.type == owlready2.HAS_SELF

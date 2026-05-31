@@ -438,3 +438,40 @@ def test_full_pizza_document_idempotent_on_second_pass():
     text1 = render(parse(doc), prefixes=_FIDELITY_PREFIXES)
     text2 = render(parse(text1), prefixes=_FIDELITY_PREFIXES)
     assert text1 == text2
+
+
+def test_render_escapes_double_quote_in_string_literal(onto):
+    # Round-trip a class with an annotation that contains a literal ``"``.
+    # Pre-fix: the renderer emitted the raw ``"`` which broke the frame/section
+    # tokeniser on re-parse and triggered an owlready2 inheritance cycle via
+    # mis-attributed SubPropertyOf operands.
+    doc = (
+        'Prefix: : <http://ex.org/>\n'
+        'Class: Pizza\n'
+        '    Annotations: rdfs:label "called \\"pizza\\""\n'
+    )
+    onto1 = parse(doc)
+    out = render(onto1)
+    # The escaped form must survive on render.
+    assert '\\"pizza\\"' in out
+    # And it must round-trip cleanly (no cycle on the second parse).
+    onto2 = parse(out)
+    pizza = onto2.world["http://ex.org/Pizza"]
+    assert pizza is not None
+    assert any('"pizza"' in str(v) for v in (pizza.label or []))
+
+
+def test_render_escapes_backslash_in_string_literal(onto):
+    doc = (
+        'Prefix: : <http://ex.org/>\n'
+        'Class: WindowsPath\n'
+        '    Annotations: rdfs:label "C:\\\\Users"\n'
+    )
+    onto1 = parse(doc)
+    out = render(onto1)
+    # The literal backslash must be escaped in the output.
+    assert "C:\\\\Users" in out
+    onto2 = parse(out)
+    cls = onto2.world["http://ex.org/WindowsPath"]
+    assert cls is not None
+    assert any("C:\\Users" in str(v) for v in (cls.label or []))
