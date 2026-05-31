@@ -6,6 +6,7 @@ import owlready2
 
 from pymos._frame_tokeniser import (
     _ALL_KNOWN_KEYWORDS,
+    _AXIOM_KEYWORDS,
     _build_string_mask,
     _CANDIDATE_KW_RE,
     _finditer_outside_strings,
@@ -14,7 +15,6 @@ from pymos._frame_tokeniser import (
     _MISC_KEYWORDS,
     _ONTOLOGY_RE,
     _PREFIX_RE,
-    _SECTION_RE,
 )
 from pymos.entities import EntityResolver
 from pymos.parser import ManchesterParser
@@ -177,22 +177,33 @@ class FrameLoader:
         """
         sections: Dict[str, List[str]] = {}
         mask = _build_string_mask(body)
-        matches = list(_finditer_outside_strings(_SECTION_RE, body, mask))
-        for i, m in enumerate(matches):
-            keyword = m.group(1)
-            end = matches[i + 1].start() if i + 1 < len(matches) else len(body)
-            block = body[m.end(): end].strip()
-            operands = self._split_commas(block)
-            if operands:
-                # Repeated axiom keywords inside a frame are concatenated, not
-                # overwritten — e.g. two ``SubClassOf:`` lines on the same Class
-                # must both contribute to ``cls.is_a``.
-                sections.setdefault(keyword, []).extend(operands)
 
-        # Warn about lines that look like "Keyword: ..." but aren't in the known set.
-        # Uses a \w+-only match so prefixed names like "rdfs:label" are not flagged.
-        # Also masked: skip candidates inside quoted literals.
-        for m in _finditer_outside_strings(_CANDIDATE_KW_RE, body, mask):
+        # Use EVERY keyword-like position (known + unknown) as a section
+        # boundary. If we only used known _SECTION_RE matches, an unsupported
+        # axiom keyword such as ``SubPropertyChain:`` would not terminate the
+        # preceding known section — its content (and any subsequent unknown
+        # keywords) would all be concatenated into the prior section's
+        # operand list. With sio.omn that produced multi-line strings like
+        # ``sio:SIO_000322\n    SubPropertyChain:\n        sio:SIO_000325 o sio:SIO_000068``
+        # being handed to ``get_object_property`` and ultimately becoming
+        # malformed entity IRIs (see PR #26 bridge sanitiser for the
+        # downstream pyoxigraph failure that surfaced this).
+        candidates = list(_finditer_outside_strings(_CANDIDATE_KW_RE, body, mask))
+        for i, m in enumerate(candidates):
+            keyword = m.group(1)
+            end = candidates[i + 1].start() if i + 1 < len(candidates) else len(body)
+            if keyword in _AXIOM_KEYWORDS:
+                block = body[m.end(): end].strip()
+                operands = self._split_commas(block)
+                if operands:
+                    # Repeated axiom keywords inside a frame are concatenated, not
+                    # overwritten — e.g. two ``SubClassOf:`` lines on the same Class
+                    # must both contribute to ``cls.is_a``.
+                    sections.setdefault(keyword, []).extend(operands)
+
+        # Warn about unknown keyword-like lines (their content is now correctly
+        # dropped rather than bleeding into the preceding known section).
+        for m in candidates:
             kw = m.group(1)
             if kw not in _ALL_KNOWN_KEYWORDS:
                 warnings.warn(

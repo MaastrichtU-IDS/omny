@@ -355,3 +355,49 @@ def test_round_trip_does_not_duplicate_annotations():
     # And the second pass's annotation count isn't bigger than the first's.
     assert r2.count("Annotations:") == r1.count("Annotations:")
     assert r2.count("comment") <= r1.count("comment") * 2  # nothing exponential
+
+
+def test_unknown_axiom_keyword_does_not_leak_into_previous_section():
+    """Regression: an unsupported axiom keyword (e.g. ``SubPropertyChain:``)
+    inside a frame body must terminate the preceding known section, not
+    silently extend it.
+
+    Pre-fix, ``_split_sections`` only used known section matches as
+    boundaries. Unknown keyword text was concatenated into the prior known
+    operand list. With sio.omn, the ``SubPropertyOf:`` operand became a
+    multi-line ``sio:SIO_000322\\n    SubPropertyChain:\\n        sio:...``
+    string, which was then handed to ``get_object_property`` and turned
+    into a malformed entity IRI containing literal newlines + Manchester
+    text. owlready2's N-Triples writer faithfully serialised that IRI,
+    and pyoxigraph rejected the load.
+    """
+    import pytest
+    doc = """
+    Prefix: : <http://ex.org/>
+    ObjectProperty: p1
+        SubPropertyOf: q1
+        SubPropertyChain: :a o :b
+        Characteristics: Symmetric
+    ObjectProperty: q1
+    Class: A
+    Class: B
+    """
+    with pytest.warns(UserWarning, match="SubPropertyChain"):
+        onto = parse(doc)
+    p1 = onto.world["http://ex.org/p1"]
+    q1 = onto.world["http://ex.org/q1"]
+    assert p1 is not None and q1 is not None
+    # p1 has q1 as a USER-declared super-property; everything else in is_a is
+    # an owlready2 base / characteristic mixin (e.g. ObjectProperty,
+    # SymmetricProperty). The point: no malformed multi-line entity is picked
+    # up as a super-property.
+    user_supers = [s for s in p1.is_a
+                   if hasattr(s, "iri") and s.iri.startswith("http://ex.org/")]
+    assert [s.iri for s in user_supers] == ["http://ex.org/q1"]
+    # No entity in the world has a newline or "SubPropertyChain" in its IRI.
+    for e in list(onto.classes()) + list(onto.object_properties()):
+        assert "\n" not in e.iri
+        assert "SubPropertyChain" not in e.iri
+    # Characteristics: section still parsed correctly (unknown keyword did not
+    # consume it).
+    assert owlready2.SymmetricProperty in p1.is_a
