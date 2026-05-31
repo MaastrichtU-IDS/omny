@@ -274,9 +274,19 @@ class FrameLoader:
 
     def _apply_annotations(self, entity, lines) -> None:
         """Apply annotation axioms from a list of 'prop_name "value"' strings."""
+        from pymos.parser import unescape_quoted_string
         for line in lines:
             prop_name, _, val = line.strip().partition(" ")
-            value = val.strip().strip('"')
+            raw = val.strip()
+            if len(raw) >= 2 and raw.startswith('"') and raw.endswith('"'):
+                # Honour ``\"`` / ``\\`` inside the literal — without this, a
+                # rendered ``"a\"b"`` round-trips as ``a\"b`` and the next
+                # render double-escapes it, growing the file every cycle and
+                # eventually breaking the frame splitter (see PR following
+                # snapshot 2026-05-31).
+                value = unescape_quoted_string(raw[1:-1])
+            else:
+                value = raw.strip('"')
             if prop_name in ("rdfs:label", "label"):
                 entity.label.append(value)
             elif prop_name in ("rdfs:comment", "comment"):

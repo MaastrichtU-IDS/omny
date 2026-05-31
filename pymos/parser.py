@@ -10,6 +10,27 @@ from pymos.entities import EntityResolver
 from pymos.grammar import MANCHESTER_GRAMMAR
 
 
+def unescape_quoted_string(raw: str) -> str:
+    """Reverse ``pymos._render_expression._escape_str``.
+
+    The Manchester ``quoted_string`` grammar allows ``\\\\`` (escaped backslash)
+    and ``\\"`` (escaped quote) inside a literal. This helper turns them back
+    into the bare character. ``raw`` is the literal *contents* without the
+    surrounding ``"…"``.
+    """
+    out = []
+    i = 0
+    while i < len(raw):
+        ch = raw[i]
+        if ch == "\\" and i + 1 < len(raw) and raw[i + 1] in ('"', "\\"):
+            out.append(raw[i + 1])
+            i += 2
+        else:
+            out.append(ch)
+            i += 1
+    return "".join(out)
+
+
 # --- VERBATIM from _ref_owlapy/owlapy/parser.py ---
 
 def _transform_children(nary_visit_function):
@@ -183,7 +204,10 @@ class ManchesterParser(NodeVisitor):
         return int(node.text.strip())
 
     def visit_quoted_string(self, node, children):
-        return node.text[1:-1]  # strip surrounding quotes
+        # Strip the surrounding quotes and unescape ``\\"`` / ``\\\\`` so the
+        # round-trip with ``_escape_str`` in pymos._render_expression is
+        # lossless. See ``unescape_quoted_string`` below.
+        return unescape_quoted_string(node.text[1:-1])
 
     def visit_literal(self, node, children):
         return children[0]

@@ -10,6 +10,7 @@ import owlready2
 
 from pymos._render_expression import (
     render_expression,
+    _escape_str,
     _name,
     _render,
     _render_literal,
@@ -132,7 +133,8 @@ def _render_annotation_value(v, p: Dict[str, str]) -> str:
     if hasattr(v, "iri"):
         return _name(v, p)
     if isinstance(v, owlready2.locstr):
-        return f'"{v}"@{v.lang}' if v.lang else f'"{v}"'
+        escaped = _escape_str(str(v))
+        return f'"{escaped}"@{v.lang}' if v.lang else f'"{escaped}"'
     return _render_literal(v)
 
 
@@ -256,11 +258,19 @@ def render_frame(entity, prefixes: Optional[Dict[str, str]] = None) -> str:
 # --- Document rendering ------------------------------------------------------
 
 def _declared_datatype_iris(onto) -> list:
-    """IRIs declared as rdfs:Datatype in this ontology's world."""
+    """IRIs declared as rdfs:Datatype in this ontology's world.
+
+    owlready2 surfaces some internal storids (bare integer strings) as
+    pseudo-subjects in ``as_rdflib_graph``; those aren't real datatype IRIs
+    and emitting them creates ``Datatype: <378>`` frames that round-trip
+    back as new entities, growing the document on every parse/render cycle.
+    Keep only proper IRIs (must contain a scheme).
+    """
     import rdflib
     g = onto.world.as_rdflib_graph()
     dt = rdflib.URIRef(_RDFS + "Datatype")
-    return sorted({str(s) for s in g.subjects(rdflib.RDF.type, dt)})
+    return sorted({str(s) for s in g.subjects(rdflib.RDF.type, dt)
+                   if ":" in str(s) and not str(s).isdigit()})
 
 
 def render(onto, prefixes: Optional[Dict[str, str]] = None,
