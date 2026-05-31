@@ -143,3 +143,49 @@ def test_write_report_emits_markdown(tmp_path):
     assert "pizza" in text
     assert "robot-docker" in text and "2.4" in text
     assert "0.08" in text
+
+
+def test_snapshot_flushes_results_after_each_cell(tmp_path, monkeypatch):
+    """``run_snapshot`` must persist results.{json,csv} incrementally so that a
+    timeout / SIGINT / OOM mid-run preserves everything completed so far.
+
+    Strategy: monkey-patch ``bench_render`` to read the on-disk
+    ``results.json`` from within the call. If incremental flushing works,
+    the parse cell (which runs before render) should already be visible
+    on disk when render is invoked.
+    """
+    import json as _json
+    import bench.runners.snapshot as snap
+
+    monkeypatch.setenv("BENCH_DATA_DIR", str(tmp_path))
+    pizza_src = Path(__file__).resolve().parents[2] / "tests" / "data" / "pizza.omn"
+    (tmp_path / "pizza.omn").write_text(pizza_src.read_text())
+
+    out_dir = tmp_path / "run"
+    out_dir.mkdir()
+    seen = {}
+
+    orig_render = snap.bench_render
+
+    def spy_render(*a, **kw):
+        # Read what's on disk RIGHT NOW, while render is still running.
+        seen["mid_run_cells"] = _json.loads((out_dir / "results.json").read_text())["cells"]
+        return orig_render(*a, **kw)
+
+    monkeypatch.setattr(snap, "bench_render", spy_render)
+
+    run_snapshot(
+        out_dir=out_dir,
+        ontologies=["pizza"],
+        backends=["pyoxigraph_mem"],
+        reasoners=["none"],
+        relations=("super",),
+        construct_modes=(False,),
+        targets_per_ontology=1,
+        hot_iters=1,
+        warmup=0,
+    )
+    # The parse cell must have been visible on disk before render finished.
+    mid = seen["mid_run_cells"]
+    assert any(c["workload"] == "parse" for c in mid), \
+        f"expected parse cell visible mid-run; got workloads {[c['workload'] for c in mid]}"
