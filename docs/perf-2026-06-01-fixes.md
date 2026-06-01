@@ -69,6 +69,46 @@ End-to-end HP parse wall is now dominated by parsimonious + host
 variance. Run-to-run variance (~25 % on this host) hides the absolute
 gain, but the function is no longer a hot spot.
 
+## Fix 3 — render annotations bulk-fetch (PR #44)
+
+After the disjoint precompute landed, re-profiling HP render found
+`_annotations_line` was **97 % of total wall (171 s of 176 s with
+cProfile)** — 9 M ``getattr`` calls, one per (entity × annotation
+property) pair, almost all returning ``None``.
+
+The fix mirrors PR #40: precompute a
+``{entity_iri: ["ap_name value", …]}`` map once at the top of
+``render()`` via one ``rdflib.Graph.triples((None, ap, None))``
+scan per annotation property, thread it through ``render_frame``
+as a private ``_annotation_map`` kwarg.
+
+| ontology | render before | render after | speed-up |
+|---|---:|---:|---:|
+| pizza/koala/travel | ~0.3-0.5 s | ~0.3-0.5 s | ~1× (already negligible) |
+| **sio** | 1.16 s | 0.82 s | ~1.4× |
+| **hp**  | **123.6 s** | **25.3 s** | **4.9×** |
+
+The render now also fixes a latent correctness issue on real ontologies:
+when two annotation properties share an owlready2 ``python_name`` (e.g.
+``rdfs:comment`` and ``schema:comment`` both map to ``.comment``), the
+old per-entity ``getattr`` path **double-counted** — emitting one
+asserted triple as both ``rdfs:comment "X"`` and ``schema:comment "X"``.
+And it **missed** some triples that owlready2's attribute layer didn't
+surface (e.g. ``sio:subset`` on SIO_000001 is materialized in the
+triple store but ``entity.subset`` returns ``[]``).
+
+The bulk path walks the rdflib graph directly, so each rendered pair
+corresponds to exactly one asserted triple — confirmed via:
+
+```
+parse(sio)                          → 7480 annotation triples
+parse(render(parse(sio)))           → 7480 annotation triples
+diff                                → 0 missing, 0 added
+```
+
+`tests/test_render.py::test_render_annotation_aliased_python_names_no_duplicate`
+is the regression guard.
+
 ## What we *didn't* do
 
 Stayed within the profile-driven Pareto for this round; everything
@@ -84,11 +124,12 @@ below is documented as a future option, not yet attempted:
   batching multiple appends per class before commit would halve this
   in principle. Implementation requires touching owlready2 internals —
   fragile.
-* **Render: bulk SQL fetch.** Render makes ~270 k owlready2 attribute
-  accesses on sio, each hitting SQLite. Pulling all annotation
-  triples once via `world.as_rdflib_graph()` then bucketing by
-  subject would skip per-attribute SQL roundtrips. Probably another
-  3-5× on render past the disjoint fix.
+* **Parser python_name collapse.** Pymos's parser also collides
+  alias-shared annotation predicates (predicates with the same
+  ``python_name`` get unified at parse time, losing the original IRI).
+  Render now disagrees with parse on these — the renderer is faithful
+  to the triple store, but parse drops the source predicate identity.
+  Separate, deeper fix; see the regression test for the shape.
 
 ## Profiles on disk
 

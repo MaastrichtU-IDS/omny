@@ -139,10 +139,9 @@ def _python_attr_for(prop) -> str:
     return getattr(prop, "python_name", None) or prop.name
 
 
-def _annotation_properties_for(entity) -> list:
-    """All annotation properties to check for values on `entity`: built-ins
-    plus any AnnotationProperty registered in the world."""
-    world = entity.namespace.world
+def _annotation_properties_for_world(world) -> list:
+    """All annotation properties to check, in stable render order:
+    built-ins first, then any AnnotationProperty registered in the world."""
     aps = []
     seen = set()
     for iri in _BUILTIN_ANNOTATION_IRIS:
@@ -157,6 +156,64 @@ def _annotation_properties_for(entity) -> list:
     return aps
 
 
+def _annotation_properties_for(entity) -> list:
+    """Per-entity wrapper for :func:`_annotation_properties_for_world`."""
+    return _annotation_properties_for_world(entity.namespace.world)
+
+
+def _render_rdflib_term(v, p: Dict[str, str], world) -> str:
+    """Format an rdflib term as a Manchester annotation value.
+
+    Mirrors :func:`_render_annotation_value` but starts from rdflib's
+    URIRef/Literal/BNode rather than owlready2 Python objects, so the
+    bulk-fetch path in :func:`_build_annotation_map` doesn't need to
+    rehydrate every value through owlready2.
+    """
+    import rdflib
+    if isinstance(v, rdflib.URIRef):
+        e = world[str(v)]
+        if e is not None and hasattr(e, "iri"):
+            return _name(e, p)
+        return f"<{v}>"
+    if isinstance(v, rdflib.Literal):
+        text = str(v)
+        escaped = _escape_str(text)
+        if v.language:
+            return f'"{escaped}"@{v.language}'
+        if v.datatype:
+            # Let _render_literal handle typed literals via Python coercion;
+            # falling back to a plain quoted form preserves round-trip safety.
+            try:
+                return _render_literal(v.toPython())
+            except Exception:
+                return f'"{escaped}"'
+        return f'"{escaped}"'
+    return repr(v)
+
+
+def _build_annotation_map(onto, p: Dict[str, str]) -> Dict[str, list]:
+    """Precompute `{entity_iri: ["ap_name value", ...]}` in one bulk scan.
+
+    Replaces the per-entity ``getattr(entity, ap_attr, None)`` loop in
+    :func:`_annotations_line`, which on HP was 97 % of total render wall
+    (9 M getattr calls = 32 k entities × ~280 annotation properties).
+    One ``rdflib.Graph.triples((None, ap, None))`` per annotation property
+    collapses that to O(properties + pairs), matching the disjoint-map
+    optimisation pattern.
+    """
+    import rdflib
+    out: Dict[str, list] = {}
+    world = onto.world
+    g = world.as_rdflib_graph()
+    for ap in _annotation_properties_for_world(world):
+        ap_uri = rdflib.URIRef(ap.iri)
+        ap_name = _name(ap, p)
+        for s, _, v in g.triples((None, ap_uri, None)):
+            val_str = _render_rdflib_term(v, p, world)
+            out.setdefault(str(s), []).append(f"{ap_name} {val_str}")
+    return out
+
+
 def _render_annotation_value(v, p: Dict[str, str]) -> str:
     if hasattr(v, "iri"):
         return _name(v, p)
@@ -166,8 +223,19 @@ def _render_annotation_value(v, p: Dict[str, str]) -> str:
     return _render_literal(v)
 
 
-def _annotations_line(entity, p: Dict[str, str], indent: str = "    ") -> str:
-    """Collect (ap, value) pairs and emit a single `Annotations:` line."""
+def _annotations_line(entity, p: Dict[str, str], indent: str = "    ",
+                      *, _annotation_map: Optional[Dict[str, list]] = None) -> str:
+    """Collect (ap, value) pairs and emit a single `Annotations:` line.
+
+    When :func:`render` passes ``_annotation_map`` we look pairs up in O(1)
+    instead of issuing ~280 ``getattr`` probes per entity (was 97 % of HP
+    render wall — see :func:`_build_annotation_map`).
+    """
+    if _annotation_map is not None:
+        pairs = _annotation_map.get(entity.iri, [])
+        if not pairs:
+            return ""
+        return f"{indent}Annotations: {', '.join(pairs)}\n"
     pairs = []
     for ap in _annotation_properties_for(entity):
         vals = getattr(entity, _python_attr_for(ap), None)
@@ -214,12 +282,14 @@ def _individual_different_partners(ind) -> list:
 
 
 def render_frame(entity, prefixes: Optional[Dict[str, str]] = None,
-                 *, _disjoint_map: Optional[Dict[str, list]] = None) -> str:
+                 *, _disjoint_map: Optional[Dict[str, list]] = None,
+                 _annotation_map: Optional[Dict[str, list]] = None) -> str:
     """Render one owlready2 entity to its Manchester frame text.
 
-    ``_disjoint_map`` is an internal optimisation kwarg passed by
-    :func:`render` so we avoid re-scanning ``disjoint_classes()`` once
-    per class.  Standalone callers should leave it ``None``.
+    ``_disjoint_map`` and ``_annotation_map`` are internal optimisation
+    kwargs passed by :func:`render` so we avoid re-scanning disjoint
+    groups and re-probing every annotation property per entity.
+    Standalone callers should leave them ``None``.
     """
     p = dict(prefixes or {})
     iri = getattr(entity, "iri", None)
@@ -229,7 +299,7 @@ def render_frame(entity, prefixes: Optional[Dict[str, str]] = None,
 
     if isinstance(entity, owlready2.ThingClass):
         out = f"Class: {name}\n"
-        out += _annotations_line(entity, p)
+        out += _annotations_line(entity, p, _annotation_map=_annotation_map)
         out += _kw_line("SubClassOf", _class_supers_excluding_thing(entity), p)
         out += _kw_line("EquivalentTo", list(entity.equivalent_to), p)
         out += _kw_line("DisjointWith", _find_disjoint_partners(entity, _disjoint_map), p)
@@ -237,7 +307,7 @@ def render_frame(entity, prefixes: Optional[Dict[str, str]] = None,
 
     if isinstance(entity, owlready2.AnnotationPropertyClass):
         out = f"AnnotationProperty: {name}\n"
-        out += _annotations_line(entity, p)
+        out += _annotations_line(entity, p, _annotation_map=_annotation_map)
         sups = _user_super_properties(entity)
         if sups:
             out += _kw_line("SubPropertyOf", sups, p)
@@ -245,7 +315,7 @@ def render_frame(entity, prefixes: Optional[Dict[str, str]] = None,
 
     if isinstance(entity, owlready2.ObjectPropertyClass):
         out = f"ObjectProperty: {name}\n"
-        out += _annotations_line(entity, p)
+        out += _annotations_line(entity, p, _annotation_map=_annotation_map)
         out += _kw_line("Domain", list(entity.domain), p)
         out += _kw_line("Range",  list(entity.range), p)
         chars = _characteristic_labels(entity)
@@ -260,7 +330,7 @@ def render_frame(entity, prefixes: Optional[Dict[str, str]] = None,
 
     if isinstance(entity, owlready2.DataPropertyClass):
         out = f"DataProperty: {name}\n"
-        out += _annotations_line(entity, p)
+        out += _annotations_line(entity, p, _annotation_map=_annotation_map)
         out += _kw_line("Domain", list(entity.domain), p)
         out += _kw_line("Range",  list(entity.range), p)
         chars = _characteristic_labels(entity)
@@ -273,7 +343,7 @@ def render_frame(entity, prefixes: Optional[Dict[str, str]] = None,
 
     if isinstance(entity, owlready2.Thing):  # individuals
         out = f"Individual: {name}\n"
-        out += _annotations_line(entity, p)
+        out += _annotations_line(entity, p, _annotation_map=_annotation_map)
         out += _kw_line("Types", _individual_types_excluding_thing(entity), p)
         facts = _individual_facts(entity, p)
         if facts:
@@ -336,12 +406,16 @@ def render(onto, prefixes: Optional[Dict[str, str]] = None,
     for dt_iri in datatype_iris:
         parts.append(f"Datatype: {_shorten(dt_iri, p)}\n")
 
+    # Precompute the {entity_iri: ["ap_name value", ...]} map once
+    # (was 97 % of HP render wall pre-fix — 9 M getattr probes for empty
+    # annotations).  One rdflib triples() scan per annotation property.
+    annotation_map = _build_annotation_map(onto, p)
     for ap in sorted(onto.world.annotation_properties(), key=lambda e: e.iri):
-        parts.append(render_frame(ap, p))
+        parts.append(render_frame(ap, p, _annotation_map=annotation_map))
     for op in sorted(onto.object_properties(), key=lambda e: e.iri):
-        parts.append(render_frame(op, p))
+        parts.append(render_frame(op, p, _annotation_map=annotation_map))
     for dp in sorted(onto.data_properties(), key=lambda e: e.iri):
-        parts.append(render_frame(dp, p))
+        parts.append(render_frame(dp, p, _annotation_map=annotation_map))
     # Skip classes whose IRI was declared as a Datatype (avoid duplicate frames).
     datatype_set = set(datatype_iris)
     # Precompute the {class_iri: [partners]} map once (was 80% of render
@@ -350,8 +424,9 @@ def render(onto, prefixes: Optional[Dict[str, str]] = None,
     for cls in sorted(onto.classes(), key=lambda e: e.iri):
         if cls.iri in datatype_set:
             continue
-        parts.append(render_frame(cls, p, _disjoint_map=disjoint_map))
+        parts.append(render_frame(cls, p, _disjoint_map=disjoint_map,
+                                  _annotation_map=annotation_map))
     for ind in sorted(onto.individuals(), key=lambda e: e.iri):
-        parts.append(render_frame(ind, p))
+        parts.append(render_frame(ind, p, _annotation_map=annotation_map))
 
     return "\n".join(parts).rstrip() + "\n"
