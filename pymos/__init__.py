@@ -1,5 +1,5 @@
 from pymos.frames import parse
-from pymos.parser import parse_expression
+from pymos._lark_parser import parse_expression_lark as parse_expression
 from pymos.render import render, render_expression, render_frame
 from pymos.sparql import class_relations_query
 
