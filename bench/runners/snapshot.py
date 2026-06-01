@@ -145,6 +145,20 @@ def run_snapshot(
         except Exception as exc:
             _add(_err_cell("render", exc))
 
+        # Parse + reasoning workload — owlrl OWL 2 RL closure, pure Python.
+        # Cell is keyed by ``reasoner="owlrl"`` so it sits alongside the
+        # ``reasoner="none"`` parse row and is easy to diff in the table.
+        try:
+            from bench.workloads.parse_reason import bench_parse_then_reason
+            pr_m = bench_parse_then_reason(str(omn), hot_iters=1, warmup=0).to_dict()
+            _add(Cell(
+                ontology=onto_name, workload="parse_reason",
+                backend=None, reasoner="owlrl", relation=None, construct=None, target=None,
+                measurement=pr_m,
+            ))
+        except Exception as exc:
+            _add(_err_cell("parse_reason", exc, reasoner="owlrl"))
+
         # Target picking — needed for the query loop. If pymos.parse() or
         # pick_targets() raise (e.g. ontology has zero classes), record the
         # failure once and skip the query matrix for this ontology rather
