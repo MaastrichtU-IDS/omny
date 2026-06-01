@@ -1,34 +1,28 @@
 """Lark vs parsimonious microbenchmark on a single Manchester expression.
 
+This file is the **historical exploration** that motivated PR #45
+(``pymos/_lark_parser.py``). The production swap is done — keep this
+around as a regression check on the parser-internal cost only.
+
 Result on this host (2026-06-01, master at 1ca6765):
   parsimonious: ~2400 µs per parse
   lark (LALR):  ~444  µs per parse
-  ratio: ~5.4×
+  ratio: ~5.4× on this one expression
 
-Interpretation
---------------
-At 5.4×, swapping parsimonious for lark would buy us roughly
-``0.48 × 0.81 ≈ 39%`` reduction on total parse wall (parsimonious
-is 48% of pymos.parse per cProfile of HP; lark replaces 80% of
-that fraction). On HP: ~270 s → ~165 s. Real but not
-transformative; the next ceiling is owlready2's per-axiom
-``_class_is_a_changed`` callback (11%).
+Why the in-the-wild number is smaller
+-------------------------------------
+PR #45 measured the production parse:
+  * sio: 4.97 s → 2.79 s = 1.78×
+  * hp:  310 s  → 164 s  = 1.89×
+The 5.4× microbench is a single complex expression; real ontologies
+parse ~100 k short axiom operands, where lark's per-parse fixed
+costs (contextual lexer + tree alloc + transformer dispatch) dilute
+the structural advantage.
 
-Why this lark grammar isn't already shipped
--------------------------------------------
-* This file covers a focused **subset** (boolean, restrictions,
-  OneOf, IRI forms). The production grammar also includes data
-  ranges, facets, typed/lang/datetime/duration literals, and
-  inverse-property syntax in cardinality positions — all of which
-  must be ported and corpus-validated before swapping.
-* The pymos visitor (``pymos/parser.py``) is a parsimonious
-  ``NodeVisitor`` with parsimonious-specific child-shape unwrapping;
-  porting to lark ``Transformer`` is a separate rewrite. The
-  201-test corpus must pass byte-for-byte against the new
-  visitor's owlready2 output.
-* A reasonable estimate is 3-4 hours of focused porting + corpus
-  validation, with risk of subtle differences in operator
-  precedence and IRI tokenisation.
+For a same-shape comparison across the full corpus, use the
+:mod:`bench.runners.compare_parsers` runner instead — it pairs lark
+and parsimonious cells per ontology via ``measure_in_subprocess`` so
+RSS and JIT effects don't leak between cells.
 
 Run with::
 
