@@ -8,11 +8,12 @@ builder for class-relation retrieval.  No Java required.
 
 ## Quick taste
 
-A small ontology with a class hierarchy + an anonymous class expression
-demonstrates the three things pymos is for, end to end: **round-trip**
-(parse → render → re-parse with no loss), **query** the asserted graph,
-and **query again after a pure-Python reasoner** has materialised the
-inferences.
+One small ontology — a class hierarchy *and* an anonymous class
+expression — exercises the three things pymos is for end to end:
+**round-trip** (parse → render → re-parse with no loss), **retrieve a
+class's axioms as RDF** (including the blank-node body of any
+anonymous restrictions), and **rerun the same query after a pure-Python
+reasoner has materialised the inferences** — no Java involved.
 
 ```python
 import pymos
@@ -36,28 +37,52 @@ Individual: myPie
     Facts: hasTopping mozz
 """)
 
-# 1) Round-trip: render the ontology, re-parse the result, render again —
-#    same bytes.  The class hierarchy AND the anonymous restriction
-#    (`hasTopping some Cheese`) survive cleanly.
+# 1) Round-trip: render → re-parse → re-render is byte-equal.  The class
+#    hierarchy AND the anonymous restriction `hasTopping some Cheese`
+#    survive cleanly.
 text = pymos.render(onto)
 assert pymos.render(pymos.parse(text)) == text
 print(f"round-trip OK ({len(text.splitlines())} lines, idempotent).")
 
-# 2) Without reasoning — only what the document literally asserts.
-q = pymos.class_relations_query("<http://example.org/Food>",
-                                relations=("individual",), construct=False)
+# 2) Ask for Margherita's super-axioms as RDF.  The CONSTRUCT result
+#    contains both the named superclass AND the anonymous restriction
+#    bnode, with its `owl:onProperty` / `owl:someValuesFrom` body
+#    walked in for you — so you can read the class expression directly.
+q = pymos.class_relations_query("<http://example.org/Margherita>",
+                                relations=("super",), construct=True)
+g = run_rdflib(q, onto.world.as_rdflib_graph())
+M = rdflib.URIRef("http://example.org/Margherita")
+print("Margherita super-axioms:")
+for o in g.objects(M, rdflib.RDFS.subClassOf):
+    if o == rdflib.OWL.Thing:
+        continue
+    if isinstance(o, rdflib.BNode):
+        op = g.value(o, rdflib.OWL.onProperty)
+        f  = g.value(o, rdflib.OWL.someValuesFrom)
+        print(f"  SubClassOf [{op.split('/')[-1]} some {f.split('/')[-1]}]")
+    else:
+        print(f"  SubClassOf {o.split('/')[-1]}")
+# Margherita super-axioms:
+#   SubClassOf Pizza
+#   SubClassOf [hasTopping some Cheese]      ← anonymous restriction
+
+# 3) Same shape of query, different question: which individuals belong to
+#    Food?  The asserted graph says "none directly".  After a pure-Python
+#    OWL 2 RL reasoner materialises subsumption (myPie a Margherita →
+#    Pizza → Food), `myPie` appears.
+q_ind = pymos.class_relations_query("<http://example.org/Food>",
+                                    relations=("individual",),
+                                    construct=False)
 asserted = onto.world.as_rdflib_graph()
 print("Food individuals (asserted):",
-      sorted(str(r[0]) for r in run_rdflib(q, asserted)))
+      sorted(str(r[0]) for r in run_rdflib(q_ind, asserted)))
 # Food individuals (asserted): []
 
-# 3) Same SPARQL, after a pure-Python OWL 2 RL reasoner has materialised
-#    subsumption (myPie a Margherita → ... → Food).  No Java needed.
 reasoned = rdflib.Graph()
 reasoned.parse(data=asserted.serialize(format="turtle"), format="turtle")
 owlrl.DeductiveClosure(owlrl.OWLRL_Semantics).expand(reasoned)
 print("Food individuals (reasoned):",
-      sorted(str(r[0]) for r in run_rdflib(q, reasoned)))
+      sorted(str(r[0]) for r in run_rdflib(q_ind, reasoned)))
 # Food individuals (reasoned): ['http://example.org/myPie']
 ```
 
