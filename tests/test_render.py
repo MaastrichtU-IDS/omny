@@ -387,6 +387,58 @@ def test_render_annotation_property_frame():
     assert out.startswith("AnnotationProperty: :hasNote")
 
 
+def test_render_annotation_aliased_python_names_no_duplicate():
+    """When two annotation properties share an owlready2 ``python_name``
+    (e.g. ``rdfs:comment`` and ``schema:comment`` both map to the
+    ``.comment`` attribute), each entity's rendered Annotations line must
+    list each triple ONCE under its actual predicate — not duplicate every
+    value across both predicates.
+
+    Regression guard for the bulk-fetch render path. The pre-bulk
+    per-entity ``getattr`` path used to iterate both APs and ask
+    owlready2 for ``entity.comment`` each time, so the same value was
+    rendered twice — once as ``rdfs:comment "X"`` and once as
+    ``schema:comment "X"``. The bulk path goes triple-by-triple, so this
+    can never happen.
+
+    We populate the graph directly via ``world.as_rdflib_graph()`` because
+    pymos's parser also collapses python_name-aliased predicates today
+    (separate bug); this test isolates the renderer's behaviour.
+    """
+    import rdflib
+    doc = """
+    Prefix: : <http://ex.org/>
+    Prefix: rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+    Prefix: schema: <http://schema.org/>
+    AnnotationProperty: schema:comment
+    Class: A
+    Class: B
+    """
+    o = parse(doc)
+    g = o.world.as_rdflib_graph()
+    A = rdflib.URIRef("http://ex.org/A")
+    B = rdflib.URIRef("http://ex.org/B")
+    with o:
+        g.add((A, rdflib.RDFS.comment, rdflib.Literal("from-rdfs")))
+        g.add((B, rdflib.URIRef("http://schema.org/comment"), rdflib.Literal("from-schema")))
+
+    text = render(o, prefixes={"": "http://ex.org/",
+                               "rdfs": "http://www.w3.org/2000/01/rdf-schema#",
+                               "schema": "http://schema.org/"})
+    # A's frame: only rdfs:comment "from-rdfs"; schema:comment must not appear
+    a_frame = next(b for b in text.split("\n\n") if b.startswith("Class: :A"))
+    assert 'rdfs:comment "from-rdfs"' in a_frame
+    assert "schema:comment" not in a_frame, (
+        f"schema:comment leaked into A's frame (alias-collision bug):\n{a_frame}"
+    )
+    # B's frame: only schema:comment "from-schema"; rdfs:comment must not appear
+    b_frame = next(b for b in text.split("\n\n") if b.startswith("Class: :B"))
+    assert 'schema:comment "from-schema"' in b_frame
+    assert "rdfs:comment" not in b_frame, (
+        f"rdfs:comment leaked into B's frame (alias-collision bug):\n{b_frame}"
+    )
+
+
 def test_render_datatype_frame_in_document():
     doc = """
     Prefix: : <http://ex.org/>
