@@ -145,6 +145,7 @@ class FrameLoader:
         Frame keywords inside quoted annotation literals are ignored via a
         string mask so e.g. ``rdfs:comment "...the Class: prefix..."`` does not
         spuriously start a new frame.
+
         """
         mask = _build_string_mask(text)
         matches = list(_finditer_outside_strings(_FRAME_RE, text, mask))
