@@ -140,12 +140,13 @@ Approach:
 | ontology | parse (parsimonious) | parse (lark) | speed-up |
 |---|---:|---:|---:|
 | sio | 4.97 s (mean of 2) | 2.79 s (mean of 2) | 1.78× |
-| hp  | 275 s (1 run)      | _follow-up commit_ | _follow-up commit_ |
+| hp  | 310 s (mean of 2)  | 164 s (mean of 2)  | 1.89× |
 
-(HP parse takes ~5 min per run; the lark-HP figure lands in a
-follow-up commit on this branch once both lark-HP runs complete.
-The sio measurement and 425-expression sio equivalence already
-establish the win at smaller scale.)
+Same shape on both ontologies. Per-run parsimonious HP varies
+275-345 s on this host (consistent with the historical ~270 s figure);
+lark HP varies 160-168 s. The lark contribution is concentrated in
+the parser core — owlready2 axiom emission and frame splitting
+dominate the remaining lark wall.
 
 The real-world win is much smaller than the 5.4× microbench
 predicted because parsimonious is only 48 % of total parse wall and
