@@ -17,7 +17,7 @@ pyoxigraph = ["pyoxigraph>=0.4"]
 rdflib = ["rdflib>=7.0"]
 endpoint = ["SPARQLWrapper>=2.0"]
 reasoning = ["owlrl>=6.0"]
-dev = ["pytest>=8.0", "pyoxigraph>=0.4", "rdflib>=7.0", "ruff>=0.6", "ipython>=8.0"]
+dev = ["pytest>=8.0", "pyoxigraph>=0.4", "rdflib>=7.0", "ruff>=0.6", "lark>=1.0", "ipython>=8.0"]
 bench = [
   "psutil>=5.9",
   "matplotlib>=3.8",
