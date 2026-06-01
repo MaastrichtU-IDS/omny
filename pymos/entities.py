@@ -59,14 +59,23 @@ class EntityResolver:
         return self._get_or_create(name, owlready2.DataProperty)
 
     def get_annotation_property(self, name: str):
+        """Return (or create) an annotation property by name.
+
+        OWL 2 punning allows the same IRI to be used as both an object
+        property and an annotation property (real example: OBO's
+        ``RO_0002433`` in the Human Phenotype Ontology). When the IRI is
+        already declared as a non-annotation entity we **return that
+        existing entity** rather than raise — the value is then stored
+        via ``prop[entity].append(value)`` in ``_apply_annotations``,
+        which is IRI-keyed and works for any property kind. The earlier
+        raise was added in PR #25 to prevent same-local-name collisions
+        between two distinct annotation properties (``rdfs:comment`` vs
+        ``schema.org/comment``); that collision is now prevented by the
+        IRI-keyed write itself, so the raise is no longer needed.
+        """
         iri = self.expand(name)
         existing = self.world[iri]
         if existing is not None:
-            if not isinstance(existing, owlready2.AnnotationPropertyClass):
-                raise ValueError(
-                    f"{name!r} is already declared as a non-annotation entity; "
-                    "punning an annotation property is not supported"
-                )
             return existing
         return self._get_or_create(name, owlready2.AnnotationProperty)
 

@@ -233,15 +233,40 @@ def test_custom_annotation_property():
     assert "hello" in getattr(c, "note", [])
 
 
-def test_annotation_property_name_collision_raises():
+def test_annotation_property_punning_does_not_raise():
+    """OWL 2 punning: the same IRI may be used as both an object property
+    AND an annotation property (real example: OBO's ``RO_0002433`` in
+    the Human Phenotype Ontology). pymos must accept this without
+    erroring — the annotation value is stored via owlready2's IRI-keyed
+    ``prop[entity]`` view, which keeps the two uses' values apart.
+
+    Earlier (PR #25) the loader raised on this case to prevent same-
+    local-name collisions between two distinct annotation properties
+    (e.g. ``rdfs:comment`` vs ``schema.org/comment``); that collision is
+    now prevented by the IRI-keyed write itself in
+    ``_append_property_value``, so the raise is no longer needed and
+    actively blocks legitimate ontologies (HP, OBI, sio).
+    """
     doc = """
     Prefix: : <http://ex.org/>
     ObjectProperty: rel
     Class: C
-        Annotations: rel "oops"
+        Annotations: rel "punned"
     """
-    with pytest.raises(ValueError):
-        parse(doc)
+    import rdflib
+    onto = parse(doc)
+    C = onto.world["http://ex.org/C"]
+    rel = onto.world["http://ex.org/rel"]
+    assert C is not None and rel is not None
+    # The value is stored as a bare data triple bypassing owlready2's
+    # ObjectProperty callback machinery; check the RDF graph directly.
+    g = onto.world.as_rdflib_graph()
+    found = list(g.triples(
+        (rdflib.URIRef("http://ex.org/C"),
+         rdflib.URIRef("http://ex.org/rel"),
+         None),
+    ))
+    assert any(str(t[2]) == "punned" for t in found), f"got {found}"
 
 
 # FIX 2 test
@@ -371,7 +396,6 @@ def test_unknown_axiom_keyword_does_not_leak_into_previous_section():
     text. owlready2's N-Triples writer faithfully serialised that IRI,
     and pyoxigraph rejected the load.
     """
-    import pytest
     doc = """
     Prefix: : <http://ex.org/>
     ObjectProperty: p1

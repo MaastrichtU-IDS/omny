@@ -83,28 +83,40 @@ class FrameLoader:
     # ------------------------------------------------------------------
 
     def load(self, text: str) -> None:
-        """Parse *text* as a Manchester document and populate the ontology."""
+        """Parse *text* as a Manchester document and populate the ontology.
+
+        Each frame is dispatched in its own ``try`` block: a malformed
+        frame (e.g. ROBOT's non-W3C-standard GCI emission
+        ``Class: (expr) and (expr)``, where the "subject" isn't a name)
+        warns and is skipped rather than aborting the whole load. Same
+        posture as the existing unknown-keyword and inheritance-cycle
+        handling.
+        """
         for frame_type, subject, body in self._split_frames(text):
-            if frame_type in _MISC_KEYWORDS:
-                # Misc axioms have no subject; `body` is "subject + body" concatenated.
-                # Rejoin them, then comma-split into operand IRIs.
-                operands = self._split_commas((subject + " " + body).strip())
-                self._handle_misc(frame_type, operands)
-                continue
-            sections = self._split_sections(body)
-            if frame_type == "Class":
-                self._handle_class(subject, sections)
-            elif frame_type == "ObjectProperty":
-                self._handle_object_property(subject, sections)
-            elif frame_type == "DataProperty":
-                self._handle_data_property(subject, sections)
-            elif frame_type == "Individual":
-                self._handle_individual(subject, sections)
-            elif frame_type == "AnnotationProperty":
-                self._handle_annotation_property(subject, sections)
-            elif frame_type == "Datatype":
-                self._handle_datatype(subject, sections)
-            # Unknown frame types are silently ignored.
+            try:
+                if frame_type in _MISC_KEYWORDS:
+                    operands = self._split_commas((subject + " " + body).strip())
+                    self._handle_misc(frame_type, operands)
+                    continue
+                sections = self._split_sections(body)
+                if frame_type == "Class":
+                    self._handle_class(subject, sections)
+                elif frame_type == "ObjectProperty":
+                    self._handle_object_property(subject, sections)
+                elif frame_type == "DataProperty":
+                    self._handle_data_property(subject, sections)
+                elif frame_type == "Individual":
+                    self._handle_individual(subject, sections)
+                elif frame_type == "AnnotationProperty":
+                    self._handle_annotation_property(subject, sections)
+                elif frame_type == "Datatype":
+                    self._handle_datatype(subject, sections)
+                # Unknown frame types are silently ignored.
+            except (ValueError, TypeError) as e:
+                warnings.warn(
+                    f"frame {frame_type}: {subject!r} skipped — {type(e).__name__}: {e}",
+                    stacklevel=2,
+                )
 
     # ------------------------------------------------------------------
     # Frame-splitting helpers
@@ -274,14 +286,42 @@ class FrameLoader:
     def _handle_class(self, subject: str, sections: dict) -> None:
         cls = self.r.get_class(subject)
         for expr in sections.get("SubClassOf", []):
-            cls.is_a.append(self._parse_ce(expr))
+            self._safe_append_is_a(cls, self._parse_ce(expr), kind="SubClassOf", subject=subject)
         for expr in sections.get("EquivalentTo", []):
-            cls.equivalent_to.append(self._parse_ce(expr))
+            try:
+                cls.equivalent_to.append(self._parse_ce(expr))
+            except TypeError as e:
+                warnings.warn(
+                    f"EquivalentTo on {subject!r} dropped: {e}",
+                    stacklevel=2,
+                )
         disjoints = [self.r.get_class(x) for x in sections.get("DisjointWith", [])]
         if disjoints:
             with self.r.onto:
                 owlready2.AllDisjoint([cls, *disjoints])
         self._apply_annotations(cls, sections.get("Annotations", []))
+
+    @staticmethod
+    def _safe_append_is_a(entity, value, *, kind: str, subject: str) -> None:
+        """``entity.is_a.append(value)`` with a TypeError catch for inheritance
+        cycles. Real ontologies (HP, DOID, deprecated terms in OBO) sometimes
+        declare ``X SubClassOf X`` directly or via a longer chain; owlready2
+        rejects the resulting ``__bases__`` update with ``TypeError: a
+        __bases__ item causes an inheritance cycle``. Treat it the same way
+        we treat unknown keywords: warn and continue rather than abort the
+        whole parse.
+        """
+        try:
+            entity.is_a.append(value)
+        except TypeError as e:
+            if "inheritance cycle" not in str(e):
+                raise
+            warnings.warn(
+                f"{kind} on {subject!r} dropped — would create an inheritance "
+                f"cycle ({value!r}). The asserted axiom is preserved in the "
+                f"underlying RDF graph but not in owlready2's class hierarchy.",
+                stacklevel=2,
+            )
 
     def _apply_annotations(self, entity, lines) -> None:
         """Apply annotation axioms from a list of 'prop_name "value"' strings."""
@@ -306,24 +346,35 @@ class FrameLoader:
                 prop = self.r.get_annotation_property(prop_name)
                 self._append_property_value(entity, prop, value)
 
-    @staticmethod
-    def _append_property_value(entity, prop, value) -> None:
-        """Add ``value`` to ``prop[entity]`` (the IRI-keyed list view).
+    def _append_property_value(self, entity, prop, value) -> None:
+        """Add ``value`` to ``entity`` under property ``prop``.
 
-        Why ``prop[entity]`` instead of ``getattr/setattr(entity, name, …)``?
-        owlready2's Python attribute name for a property is the **local part**
-        of its IRI. Two distinct properties whose IRIs differ only in
-        namespace (e.g. ``rdfs:comment`` and ``schema.org#comment``) end up
-        aliasing the same attribute ``entity.comment``. Round-tripping a
-        rendered ontology would then store both properties' values in the
-        same list, doubling them on every parse/render cycle (sio.omn:
-        10 512 → 14 633 → 22 875 annotation pairs across three rounds).
-        ``prop[entity]`` is a property-keyed view that stays isolated.
+        Uses owlready2's IRI-keyed view ``prop[entity].append(value)`` —
+        keeping distinct properties with the same local name (e.g.
+        ``rdfs:comment`` vs ``schema.org/comment``) from pooling values
+        into the same attribute and doubling on round-trip.
 
-        FunctionalProperty values are stored as a scalar via the attribute
-        API in owlready2; ``prop[entity].append`` accepts list-like
-        semantics for both functional and non-functional properties.
+        Punning fallback: if ``prop`` is an ObjectProperty but ``value``
+        is a plain literal (str / int / bool / float — the OWL 2 punning
+        case where the same IRI is used as both an object property and
+        an annotation property; real example: HP's ``RO_0002433``),
+        ``prop[entity].append`` triggers owlready2's
+        ``_on_class_prop_changed`` callback which assumes the value is
+        an entity and crashes with ``AttributeError: 'str' object has no
+        attribute 'is_a'``. In that case we fall through to a low-level
+        data-triple write so the annotation is recorded as
+        ``<entity> <prop> "value"^^xsd:string`` without invoking the
+        object-property machinery.
         """
+        is_object_prop = isinstance(prop, owlready2.ObjectPropertyClass)
+        is_entity_value = isinstance(value, owlready2.Thing)
+        if is_object_prop and not is_entity_value:
+            world = self.r.world
+            xsd_string = world._abbreviate("http://www.w3.org/2001/XMLSchema#string")
+            self.r.onto._add_data_triple_raw_spod(
+                entity.storid, prop.storid, value, xsd_string,
+            )
+            return
         prop[entity].append(value)
 
     _CHARS = {
