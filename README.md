@@ -18,7 +18,7 @@ reasoner has materialised the inferences** — no Java involved.
 ```python
 import pymos
 from pymos.store import run_rdflib
-import rdflib, owlrl  # `pip install pymos[reasoning]` for owlrl
+import owlrl  # `pip install pymos[reasoning]` for owlrl  (used in step 3)
 
 onto = pymos.parse("""
 Prefix: : <http://example.org/>
@@ -44,27 +44,32 @@ text = pymos.render(onto)
 assert pymos.render(pymos.parse(text)) == text
 print(f"round-trip OK ({len(text.splitlines())} lines, idempotent).")
 
-# 2) Ask for Margherita's super-axioms as RDF.  The CONSTRUCT result
-#    contains both the named superclass AND the anonymous restriction
-#    bnode, with its `owl:onProperty` / `owl:someValuesFrom` body
-#    walked in for you — so you can read the class expression directly.
+# 2) Ask for Margherita's super-axioms as RDF, then render the SPARQL
+#    result back to Manchester — the anonymous restriction
+#    `hasTopping some Cheese` and the chain to `Food` both come back
+#    intact, in human-readable syntax.
 q = pymos.class_relations_query("<http://example.org/Margherita>",
                                 relations=("super",), construct=True)
-g = run_rdflib(q, onto.world.as_rdflib_graph())
-M = rdflib.URIRef("http://example.org/Margherita")
-print("Margherita super-axioms:")
-for o in g.objects(M, rdflib.RDFS.subClassOf):
-    if o == rdflib.OWL.Thing:
-        continue
-    if isinstance(o, rdflib.BNode):
-        op = g.value(o, rdflib.OWL.onProperty)
-        f  = g.value(o, rdflib.OWL.someValuesFrom)
-        print(f"  SubClassOf [{op.split('/')[-1]} some {f.split('/')[-1]}]")
-    else:
-        print(f"  SubClassOf {o.split('/')[-1]}")
-# Margherita super-axioms:
-#   SubClassOf Pizza
-#   SubClassOf [hasTopping some Cheese]      ← anonymous restriction
+result_graph = run_rdflib(q, onto.world.as_rdflib_graph())
+
+import owlready2, io
+result_world = owlready2.World()
+result_onto = result_world.get_ontology("http://example.org/result/")
+result_onto.load(
+    fileobj=io.BytesIO(result_graph.serialize(format="nt").encode()),
+    format="ntriples",
+)
+print(pymos.render(result_onto, prefixes={"": "http://example.org/"}))
+# Prefix: : <http://example.org/>
+# Ontology: <http://example.org/result>
+#
+# ObjectProperty: :hasTopping
+# Class: :Cheese
+# Class: :Food
+# Class: :Margherita
+#     SubClassOf: :Pizza, :hasTopping some :Cheese
+# Class: :Pizza
+#     SubClassOf: :Food
 
 # 3) Same shape of query, different question: which individuals belong to
 #    Food?  The asserted graph says "none directly".  After a pure-Python
@@ -78,6 +83,7 @@ print("Food individuals (asserted):",
       sorted(str(r[0]) for r in run_rdflib(q_ind, asserted)))
 # Food individuals (asserted): []
 
+import rdflib
 reasoned = rdflib.Graph()
 reasoned.parse(data=asserted.serialize(format="turtle"), format="turtle")
 owlrl.DeductiveClosure(owlrl.OWLRL_Semantics).expand(reasoned)
