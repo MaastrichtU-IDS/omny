@@ -64,3 +64,17 @@ def test_bench_parse_then_reason_returns_extras(pizza_text, tmp_path):
     # The combined wall is reported in `wall_cold`. owlrl on tiny pizza is
     # measurable but small; just check we got non-zero numbers back.
     assert m.wall_cold > 0
+
+
+def test_bench_parse_owlapi_smoke(pizza_text, tmp_path):
+    """Skip if docker isn't available; otherwise just check the Measurement shape."""
+    import shutil
+    if shutil.which("docker") is None:
+        import pytest
+        pytest.skip("docker not available")
+    from bench.workloads.parse_owlapi import bench_parse_owlapi
+    p = tmp_path / "pizza.omn"
+    p.write_text(pizza_text)
+    m = bench_parse_owlapi(str(p), hot_iters=1, warmup=0)
+    assert m.wall_cold > 0
+    assert m.extras.get("backend") == "owlapi-via-robot"
