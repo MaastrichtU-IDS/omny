@@ -51,6 +51,12 @@ _ALL_KNOWN_KEYWORDS = frozenset(_AXIOM_KEYWORDS) | _FRAME_KEYWORDS
 _CANDIDATE_KW_RE = re.compile(r"^\s*(\w+):\s", re.M)
 
 
+# Match one ``"..."`` literal (with ``\"`` / ``\\`` escapes), non-greedy.
+# Compiled once and reused — the body of this regex is what every
+# ``_build_string_mask`` call is doing in a Python char loop today.
+_STRING_LITERAL_RE = re.compile(r'"(?:[^"\\]|\\.)*"', re.S)
+
+
 def _build_string_mask(text: str) -> bytearray:
     """Return a per-character mask: 1 inside a ``"..."`` literal, 0 outside.
 
@@ -59,24 +65,17 @@ def _build_string_mask(text: str) -> bytearray:
     inside an annotation literal can be mis-split. Recognises backslash-escaped
     quotes (``\\"``) so the closing quote of a normal literal is detected
     correctly.
+
+    Uses ``re.finditer`` to locate literals in one C-level pass, then bulk
+    bytearray slice-assigns the runs to 1 — vastly faster than the previous
+    Python char-by-char loop on documents with many short literals (HP:
+    32 k frames, ~30 MB total). cProfile of HP parse 2026-06-01 had this
+    function at ~8 % of total parse wall.
     """
     mask = bytearray(len(text))
-    in_string = False
-    i = 0
-    while i < len(text):
-        ch = text[i]
-        if in_string:
-            mask[i] = 1
-            if ch == "\\" and i + 1 < len(text):
-                mask[i + 1] = 1
-                i += 2
-                continue
-            if ch == '"':
-                in_string = False
-        elif ch == '"':
-            in_string = True
-            mask[i] = 1
-        i += 1
+    for m in _STRING_LITERAL_RE.finditer(text):
+        s, e = m.start(), m.end()
+        mask[s:e] = b"\x01" * (e - s)
     return mask
 
 
