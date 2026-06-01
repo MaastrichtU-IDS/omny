@@ -159,6 +159,21 @@ def run_snapshot(
         except Exception as exc:
             _add(_err_cell("parse_reason", exc, reasoner="owlrl"))
 
+        # OWLAPI parse via ROBOT-docker — a head-to-head reference for
+        # pymos.parse. Wall includes JVM + docker startup (~4 s floor);
+        # subtract ``floors["robot-docker"]`` for a JVM-pure number.
+        # Skipped if docker isn't available.
+        try:
+            from bench.workloads.parse_owlapi import bench_parse_owlapi
+            ow_m = bench_parse_owlapi(str(omn), hot_iters=1, warmup=0).to_dict()
+            _add(Cell(
+                ontology=onto_name, workload="parse_owlapi",
+                backend=None, reasoner="none", relation=None, construct=None, target=None,
+                measurement=ow_m,
+            ))
+        except Exception as exc:
+            _add(_err_cell("parse_owlapi", exc))
+
         # Target picking — needed for the query loop. If pymos.parse() or
         # pick_targets() raise (e.g. ontology has zero classes), record the
         # failure once and skip the query matrix for this ontology rather
