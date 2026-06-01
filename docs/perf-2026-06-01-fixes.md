@@ -109,16 +109,57 @@ diff                                → 0 missing, 0 added
 `tests/test_render.py::test_render_annotation_aliased_python_names_no_duplicate`
 is the regression guard.
 
+## Fix 4 — parsimonious → lark parser port (PR #45)
+
+The parsimonious PEG packrat parser was the largest remaining hot
+spot in `pymos.parse` (~48 % of HP parse wall per the cProfile
+snapshot). The lark microbench at PR #43 measured ~5.4× on a single
+complex expression; this PR is the production swap.
+
+Approach:
+* New `pymos/_lark_parser.py` holds a module-level
+  `Lark(parser="lalr")` instance and a `LarkManchesterParser` class
+  with the same interface as the parsimonious-backed
+  `ManchesterParser` so `FrameLoader` switches with a one-line
+  import change.
+* The Transformer instance is cached on the parser (per FrameLoader
+  load) — lark's `Transformer.__init__` builds a rule→method
+  dispatch dict, which on HP's ~100 k axiom-operand parses would
+  otherwise dominate the per-parse cost.
+* Object/data-property restrictions are unified at parse time and
+  disambiguated at transform time (LALR can't backtrack across the
+  ordered choice parsimonious uses).
+* The acceptance criterion was the cross-backend equivalence test
+  in `tests/test_lark_equivalence.py`: every class expression on
+  every anonymous SubClassOf/EquivalentTo operand in sio.omn
+  (425 unique expressions) round-trips through
+  `render_expression` byte-for-byte under both backends. Plus a
+  hand-curated fixture list covering every production in the
+  parsimonious grammar.
+
+| ontology | parse (parsimonious) | parse (lark) | speed-up |
+|---|---:|---:|---:|
+| sio | 4.97 s (mean of 2) | 2.79 s (mean of 2) | 1.78× |
+| hp  | 310 s (mean of 2)  | 164 s (mean of 2)  | 1.89× |
+
+Same shape on both ontologies. Per-run parsimonious HP varies
+275-345 s on this host (consistent with the historical ~270 s figure);
+lark HP varies 160-168 s. The lark contribution is concentrated in
+the parser core — owlready2 axiom emission and frame splitting
+dominate the remaining lark wall.
+
+The real-world win is much smaller than the 5.4× microbench
+predicted because parsimonious is only 48 % of total parse wall and
+because most axiom operands are short — per-parse fixed costs in
+lark's Transformer/tree path dilute the structural advantage.
+
+The parsimonious backend remains importable as
+`from pymos.parser import parse_expression` for callers that want
+the legacy behaviour; `pymos.parse_expression` and
+`pymos.parse` now use lark.
+
 ## What we *didn't* do
 
-Stayed within the profile-driven Pareto for this round; everything
-below is documented as a future option, not yet attempted:
-
-* **parsimonious → lark swap** (Tier 2 in the original lever list).
-  Would target the 48 % of parse wall that is parser-internal. Real
-  work — needs grammar port + corpus re-validation. Expected gain:
-  10-30× on parse based on published lark vs parsimonious
-  benchmarks; the pymos visitor would also need a rewrite.
 * **owlready2 `_class_is_a_changed` batching.** 11 % of parse wall on
   HP. Each `is_a.append` triggers a full `__bases__` recomputation;
   batching multiple appends per class before commit would halve this

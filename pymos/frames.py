@@ -17,7 +17,7 @@ from pymos._frame_tokeniser import (
     _PREFIX_RE,
 )
 from pymos.entities import EntityResolver
-from pymos.parser import ManchesterParser
+from pymos._lark_parser import LarkManchesterParser as ManchesterParser
 
 
 def parse(text: str, onto: Optional[owlready2.Ontology] = None,
