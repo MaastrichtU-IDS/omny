@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "omny"
-version = "0.1.0"
+version = "0.1.1"
 description = "Pure-Python Manchester OWL Syntax parser and renderer for owlready2, with a class-relation SPARQL query builder. No Java required."
 readme = "README.md"
 requires-python = ">=3.10"
@@ -25,7 +25,12 @@ classifiers = [
     "Topic :: Software Development :: Libraries :: Python Modules",
     "Topic :: Text Processing :: Markup",
 ]
-dependencies = ["lark>=1.0", "parsimonious>=0.10", "owlready2>=0.46"]
+# rdflib is hard-required by ``omny.render`` (it calls
+# ``world.as_rdflib_graph()`` for the datatype enumeration and the
+# bulk annotation-fetch optimisation), so it must be in core deps;
+# the optional ``[rdflib]`` extra is kept for backward compatibility
+# with anyone who installed it explicitly.
+dependencies = ["lark>=1.0", "parsimonious>=0.10", "owlready2>=0.46", "rdflib>=7.0"]
 
 [project.urls]
 Homepage = "https://github.com/MaastrichtU-IDS/omny"
