@@ -359,6 +359,38 @@ def test_subclassof_named_and_anonymous_parents_mixed():
     )
 
 
+def test_individual_types_named_and_anonymous_mixed():
+    """Regression for the direct-write rdf:type path on Individual frames:
+    when ``Types:`` mixes named-class targets (which go through
+    ``_direct_write_rdf_type`` → triple store + lazy reload) with
+    anonymous-restriction targets (which stay on the per-item
+    ``is_a.append`` path), both kinds must end up in ``ind.is_a`` after
+    the end-of-parse invalidation pass.
+    """
+    doc = """
+    Prefix: : <http://ex.org/>
+    Class: Pizza
+    Class: Topping
+    Class: Cheese
+        SubClassOf: Topping
+    ObjectProperty: hasTopping
+    Individual: m1
+        Types: Pizza, Cheese, hasTopping some Cheese
+    """
+    onto = parse(doc)
+    m1 = onto.world["http://ex.org/m1"]
+    pizza = onto.world["http://ex.org/Pizza"]
+    cheese = onto.world["http://ex.org/Cheese"]
+    # Both named-class types (direct-write path) must be present.
+    assert pizza in m1.is_a, "named type Pizza missing from is_a (direct-write path)"
+    assert cheese in m1.is_a, "named type Cheese missing from is_a (direct-write path)"
+    # Anonymous restriction type (per-item path) must still be present.
+    restrictions = [t for t in m1.is_a if getattr(t, "property", None) is not None]
+    assert len(restrictions) == 1, (
+        f"expected 1 anonymous restriction in is_a, got {len(restrictions)}: {m1.is_a}"
+    )
+
+
 def test_annotation_alias_predicate_identity_preserved():
     """The ``rdfs:label`` / ``rdfs:comment`` shorthand forms (and the bare
     ``label`` / ``comment`` aliases) must write triples under the actual
