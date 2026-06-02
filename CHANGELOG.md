@@ -2,6 +2,20 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.1.1] — 2026-06-02 (packaging fix)
+
+Bug fix: `rdflib` was in `[project.optional-dependencies]` but
+`omny.render` requires it unconditionally (the datatype enumeration
+in `_declared_datatype_iris` and the bulk annotation-fetch in
+`_build_annotation_map` both call `world.as_rdflib_graph()`). A
+fresh `pip install omny==0.1.0` could parse but not render.
+
+Moved `rdflib>=7.0` to core dependencies. The optional `[rdflib]`
+extra is kept for backward compatibility — installing it explicitly
+is now a no-op but doesn't error.
+
+No other behavioural changes.
+
 ## [0.1.0] — 2026-06-02 (first PyPI release as `omny`)
 
 Initial PyPI release. The package was developed under the name `pymos`
