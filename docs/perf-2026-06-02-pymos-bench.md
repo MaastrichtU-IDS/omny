@@ -104,6 +104,7 @@ HP (was 2-5× slower than parse pre-fixes; now ~1.5× slower).
 | 2026-06-01 | #44 | render annotation bulk-fetch        | HP render 4.9×   |
 | 2026-06-02 | #45 | parsimonious → lark parser          | HP parse 1.89×   |
 | 2026-06-02 | #46 | bench harness polish (this doc)     | n/a — observability |
+| 2026-06-02 | #47 | `_split_commas` vectorisation        | HP parse 1.09×   |
 
 ## 5. Open levers (unchanged from `2026-06-01-fixes.md`)
 
@@ -130,15 +131,19 @@ HP (was 2-5× slower than parse pre-fixes; now ~1.5× slower).
   itself is at 25 % and the owlready2 callback chain
   (`append` + `_class_is_a_changed`) totals ~64 %.
 
-  Two new candidates from this profile:
+  One of those candidates landed:
 
-  * **`_split_commas` vectorisation** (13 %). Per-frame comma-split
-    is currently a pure-Python char loop with mask consultation;
-    likely the same kind of `re.finditer`-vs-loop win as
-    `_build_string_mask` got in PR #41.
-  * **owlready2 `_class_is_a_changed` batching** (already documented;
-    now demonstrably 27 % of wall, not the 11 % the pre-lark profile
-    showed).
+  * **`_split_commas` vectorisation (PR #47)**. Per-frame comma-split
+    rewritten to use the existing `_build_string_mask` helper and
+    slice the segments out in one batch rather than accumulate a
+    `buf += ch` per character. Microbench on real HP annotation rows:
+    1.6-3.8× per call. Same-host HP parse control: **123.5 s → 113.0 s
+    (1.09×)** — real but smaller than the 13 % function share suggested
+    (most of the savings get re-absorbed by the owlready2 callback
+    chain that dominates the remaining wall).
+  * **owlready2 `_class_is_a_changed` batching** still the largest
+    documented lever: now demonstrably 27 % of wall (was 11 % on the
+    pre-lark profile). Requires owlready2-internals work.
 
 ## Reproduction
 

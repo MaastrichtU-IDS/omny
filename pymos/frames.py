@@ -233,40 +233,39 @@ class FrameLoader:
         """Split *text* on top-level commas, ignoring those inside parens/braces
         **or inside ``"..."`` quoted literals**. Backslash-escaped quotes inside
         a literal don't end the string.
+
+        Reuses the C-level :func:`_build_string_mask` from PR #41 (no per-char
+        string-escape state to track) and avoids the ``buf += ch`` accumulator
+        that dominated the old loop on HP (138 k calls / 25 s = 13 % of the
+        post-lark parse wall; see ``docs/perf-2026-06-02-pymos-bench.md``).
+        We walk the input once tracking bracket depth and recording top-level
+        comma positions, then slice the segments out in one batch.
         """
-        out: List[str] = []
+        if not text or not text.strip():
+            return []
+        mask = _build_string_mask(text)
+        splits = [-1]
         depth = 0
-        in_string = False
-        buf = ""
+        n = len(text)
         i = 0
-        while i < len(text):
+        while i < n:
+            if mask[i]:
+                i += 1
+                continue
             ch = text[i]
-            if in_string:
-                buf += ch
-                if ch == "\\" and i + 1 < len(text):
-                    buf += text[i + 1]
-                    i += 2
-                    continue
-                if ch == '"':
-                    in_string = False
-            elif ch == '"':
-                in_string = True
-                buf += ch
+            if ch == "," and depth == 0:
+                splits.append(i)
             elif ch in "({[":
                 depth += 1
-                buf += ch
             elif ch in ")}]":
                 depth -= 1
-                buf += ch
-            elif ch == "," and depth == 0:
-                if buf.strip():
-                    out.append(buf.strip())
-                buf = ""
-            else:
-                buf += ch
             i += 1
-        if buf.strip():
-            out.append(buf.strip())
+        splits.append(n)
+        out: List[str] = []
+        for a, b in zip(splits, splits[1:]):
+            seg = text[a + 1:b].strip()
+            if seg:
+                out.append(seg)
         return out
 
     # ------------------------------------------------------------------
