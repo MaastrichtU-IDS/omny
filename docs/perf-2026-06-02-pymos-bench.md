@@ -107,6 +107,7 @@ HP (was 2-5× slower than parse pre-fixes; now ~1.5× slower).
 | 2026-06-02 | #47 | `_split_commas` vectorisation        | HP parse 1.09×   |
 | 2026-06-02 | #48 | doc: extend-batching negative result | n/a — record     |
 | 2026-06-02 | #49 | direct-write SubClassOf (named parents) | HP parse+render 1.21-1.31× |
+| 2026-06-02 | #50 | `unescape_quoted_string` vectorise   | HP parse 1.05×   |
 
 ## 5. Open levers (unchanged from `2026-06-01-fixes.md`)
 

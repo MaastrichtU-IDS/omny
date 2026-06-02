@@ -1,6 +1,7 @@
 """Manchester OWL Syntax -> owlready2 object model.
 Visitor structure adapted from owlapy (MIT); output retargeted to owlready2.
 """
+import re
 from typing import Dict, Optional
 
 import owlready2
@@ -10,6 +11,13 @@ from pymos.entities import EntityResolver
 from pymos.grammar import MANCHESTER_GRAMMAR
 
 
+# Match an escape pair: ``\\\"`` or ``\\\\``. The capture is the unescaped
+# character. Non-overlapping left-to-right semantics of ``re.sub`` line up
+# with the original char-loop's behaviour (the original advanced ``i += 2``
+# after each match so consecutive ``\\\\\\\\`` pairs collapse correctly).
+_UNESCAPE_RE = re.compile(r'\\(["\\])')
+
+
 def unescape_quoted_string(raw: str) -> str:
     """Reverse ``pymos._render_expression._escape_str``.
 
@@ -17,18 +25,14 @@ def unescape_quoted_string(raw: str) -> str:
     and ``\\"`` (escaped quote) inside a literal. This helper turns them back
     into the bare character. ``raw`` is the literal *contents* without the
     surrounding ``"…"``.
+
+    Fast path: skip the regex if no ``\\\\`` appears in the input — most
+    annotation literals on HP are plain text, so the cheap ``"\\\\" not in raw``
+    test avoids the regex's setup cost on the common case.
     """
-    out = []
-    i = 0
-    while i < len(raw):
-        ch = raw[i]
-        if ch == "\\" and i + 1 < len(raw) and raw[i + 1] in ('"', "\\"):
-            out.append(raw[i + 1])
-            i += 2
-        else:
-            out.append(ch)
-            i += 1
-    return "".join(out)
+    if "\\" not in raw:
+        return raw
+    return _UNESCAPE_RE.sub(r"\1", raw)
 
 
 # --- VERBATIM from _ref_owlapy/owlapy/parser.py ---
