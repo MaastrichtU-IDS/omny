@@ -26,10 +26,12 @@ class's axioms as RDF** (including the blank-node body of any
 anonymous restrictions), and **rerun the same query after a pure-Python
 reasoner has materialised the inferences** — no Java involved.
 
+> Steps 1 and 2 work with a plain `pip install omny`. Step 3 also needs
+> `pip install omny[reasoning]` (adds `owlrl`).
+
 ```python
 import omny
 from omny.store import run_rdflib
-import owlrl  # `pip install omny[reasoning]` for owlrl  (used in step 3)
 
 onto = omny.parse("""
 Prefix: : <http://example.org/>
@@ -86,6 +88,7 @@ print(omny.render(result_onto, prefixes={"": "http://example.org/"}))
 #    Food?  The asserted graph says "none directly".  After a pure-Python
 #    OWL 2 RL reasoner materialises subsumption (myPie a Margherita →
 #    Pizza → Food), `myPie` appears.
+import owlrl, rdflib  # pip install omny[reasoning]
 q_ind = omny.class_relations_query("<http://example.org/Food>",
                                     relations=("individual",),
                                     construct=False)
@@ -94,7 +97,6 @@ print("Food individuals (asserted):",
       sorted(str(r[0]) for r in run_rdflib(q_ind, asserted)))
 # Food individuals (asserted): []
 
-import rdflib
 reasoned = rdflib.Graph()
 reasoned.parse(data=asserted.serialize(format="turtle"), format="turtle")
 owlrl.DeductiveClosure(owlrl.OWLRL_Semantics).expand(reasoned)
@@ -129,19 +131,23 @@ SPARQL relation, every backend runner, every Jupyter magic — see
 ## Install
 
 ```bash
-pip install -e .
+pip install omny
 ```
 
 Optional extras:
 
 | Extra | What it adds |
 |-------|--------------|
-| `.[rdflib]` | rdflib ≥ 7.0 for `run_rdflib` |
-| `.[pyoxigraph]` | pyoxigraph ≥ 0.4 for `run_pyoxigraph` |
-| `.[endpoint]` | SPARQLWrapper ≥ 2.0 for `run_endpoint` |
-| `.[dev]` | all of the above + pytest + ruff |
+| `omny[pyoxigraph]` | `pyoxigraph ≥ 0.4` for `run_pyoxigraph` (in-process Rust SPARQL store) |
+| `omny[endpoint]` | `SPARQLWrapper ≥ 2.0` for `run_endpoint` (remote HTTP SPARQL) |
+| `omny[reasoning]` | `owlrl ≥ 6.0` for in-process OWL 2 RL materialisation |
+| `omny[dev]` | all of the above + `pytest` + `ruff` (developer install) |
 
-Core dependencies are `parsimonious` and `owlready2` only.
+Core dependencies pulled in automatically: `lark` (LALR parser),
+`owlready2` (OWL object model), `rdflib` (used by the renderer's
+datatype enumeration and the bulk annotation-fetch path), and
+`parsimonious` (legacy PEG parser, kept importable for backward
+compat — the default parse path uses lark).
 
 ---
 
@@ -547,12 +553,10 @@ no rows.
 - **`run_owlready2` is SELECT-only.** owlready2's built-in SPARQL engine cannot
   parse CONSTRUCT queries.  For CONSTRUCT against owlready2 data use
   `run_rdflib(q, world.as_rdflib_graph())`.
-- **Frame tokeniser is not string-aware.** A token that looks like `Keyword:` at the
-  start of a line *inside a multi-line quoted literal* can cause incorrect frame
-  splitting.  Single-line operands and standard Manchester frame forms work correctly.
-  `Import:` directives in the ontology preamble are recorded as `owl:imports`
-  declarations (visible via `onto.imported_ontologies`) but the imported ontologies
-  are **not fetched** — only the declaration is stored.
+- **`Import:` is recorded, not fetched.** Preamble `Import: <iri>` directives
+  are stored as `owl:imports` declarations (visible via
+  `onto.imported_ontologies`) but the imported ontologies are **not fetched**
+  — only the declaration is recorded.
 
 ---
 
