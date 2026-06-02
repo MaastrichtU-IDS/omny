@@ -1,26 +1,37 @@
-# pymos
+# omny
+
+[![PyPI](https://img.shields.io/pypi/v/omny.svg)](https://pypi.org/project/omny/)
+[![Python](https://img.shields.io/pypi/pyversions/omny.svg)](https://pypi.org/project/omny/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 Pure-Python Manchester OWL Syntax **parser and renderer** for
 [owlready2](https://owlready2.readthedocs.io/), plus a store-agnostic SPARQL query
-builder for class-relation retrieval.  No Java required.
+builder for class-relation retrieval. **No Java required.**
+
+```bash
+pip install omny
+```
+
+> Previously developed as `pymos`; renamed for PyPI release. See
+> [`CHANGELOG.md`](CHANGELOG.md) for the migration note.
 
 ---
 
 ## Quick taste
 
 One small ontology — a class hierarchy *and* an anonymous class
-expression — exercises the three things pymos is for end to end:
+expression — exercises the three things omny is for end to end:
 **round-trip** (parse → render → re-parse with no loss), **retrieve a
 class's axioms as RDF** (including the blank-node body of any
 anonymous restrictions), and **rerun the same query after a pure-Python
 reasoner has materialised the inferences** — no Java involved.
 
 ```python
-import pymos
-from pymos.store import run_rdflib
-import owlrl  # `pip install pymos[reasoning]` for owlrl  (used in step 3)
+import omny
+from omny.store import run_rdflib
+import owlrl  # `pip install omny[reasoning]` for owlrl  (used in step 3)
 
-onto = pymos.parse("""
+onto = omny.parse("""
 Prefix: : <http://example.org/>
 
 Class: Food
@@ -40,15 +51,15 @@ Individual: myPie
 # 1) Round-trip: render → re-parse → re-render is byte-equal.  The class
 #    hierarchy AND the anonymous restriction `hasTopping some Cheese`
 #    survive cleanly.
-text = pymos.render(onto)
-assert pymos.render(pymos.parse(text)) == text
+text = omny.render(onto)
+assert omny.render(omny.parse(text)) == text
 print(f"round-trip OK ({len(text.splitlines())} lines, idempotent).")
 
 # 2) Ask for Margherita's super-axioms as RDF, then render the SPARQL
 #    result back to Manchester — the anonymous restriction
 #    `hasTopping some Cheese` and the chain to `Food` both come back
 #    intact, in human-readable syntax.
-q = pymos.class_relations_query("<http://example.org/Margherita>",
+q = omny.class_relations_query("<http://example.org/Margherita>",
                                 relations=("super",), construct=True)
 result_graph = run_rdflib(q, onto.world.as_rdflib_graph())
 
@@ -59,7 +70,7 @@ result_onto.load(
     fileobj=io.BytesIO(result_graph.serialize(format="nt").encode()),
     format="ntriples",
 )
-print(pymos.render(result_onto, prefixes={"": "http://example.org/"}))
+print(omny.render(result_onto, prefixes={"": "http://example.org/"}))
 # Prefix: : <http://example.org/>
 # Ontology: <http://example.org/result>
 #
@@ -75,7 +86,7 @@ print(pymos.render(result_onto, prefixes={"": "http://example.org/"}))
 #    Food?  The asserted graph says "none directly".  After a pure-Python
 #    OWL 2 RL reasoner materialises subsumption (myPie a Margherita →
 #    Pizza → Food), `myPie` appears.
-q_ind = pymos.class_relations_query("<http://example.org/Food>",
+q_ind = omny.class_relations_query("<http://example.org/Food>",
                                     relations=("individual",),
                                     construct=False)
 asserted = onto.world.as_rdflib_graph()
@@ -94,10 +105,10 @@ print("Food individuals (reasoned):",
 
 The parsed value is a plain [owlready2 Ontology](
 https://owlready2.readthedocs.io/), so the full owlready2 Python API
-(class hierarchy, axioms, instances, characteristics) applies — pymos
+(class hierarchy, axioms, instances, characteristics) applies — omny
 adds no separate object model to learn.
 
-## Why pymos?
+## Why omny?
 
 - You have `.omn` files and want to **work with them in Python without a JVM**.
 - You want to **ask "what are the subclasses / superclasses / equivalent
@@ -137,7 +148,7 @@ Core dependencies are `parsimonious` and `owlready2` only.
 ## Usage A — Parse a Manchester document
 
 ```python
-import pymos
+import omny
 
 doc = """
 Prefix: : <http://example.org/>
@@ -152,7 +163,7 @@ Class: MargheritaPizza
     EquivalentTo: Pizza and (hasTopping some MozzarellaTopping)
 """
 
-onto = pymos.parse(doc)
+onto = omny.parse(doc)
 
 # Look up classes by full IRI
 food       = onto.world["http://example.org/Food"]
@@ -175,14 +186,14 @@ argument to populate it in-place.
 
 ```python
 import owlready2
-import pymos
+import omny
 
 onto = owlready2.World().get_ontology("http://example.org/onto.owl")
 with onto:
     class hasTopping(owlready2.ObjectProperty): pass
     class Cheese(owlready2.Thing): pass
 
-expr = pymos.parse_expression("hasTopping some Cheese", onto)
+expr = omny.parse_expression("hasTopping some Cheese", onto)
 print(expr)        # onto.hasTopping.some(onto.Cheese)
 print(type(expr))  # <class 'owlready2.class_construct.Restriction'>
 ```
@@ -198,9 +209,9 @@ directly to `.is_a` or `.equivalent_to` lists.
 ### CONSTRUCT — retrieve the full RDF subgraph of related classes
 
 ```python
-import pymos
-from pymos import class_relations_query
-from pymos.store import run_rdflib
+import omny
+from omny import class_relations_query
+from omny.store import run_rdflib
 
 doc = """
 Prefix: : <http://example.org/>
@@ -210,7 +221,7 @@ Class: Pizza
 Class: MargheritaPizza
     SubClassOf: Pizza
 """
-onto = pymos.parse(doc)
+onto = omny.parse(doc)
 
 # Build a CONSTRUCT query for the superclasses and subclasses of Pizza
 q = class_relations_query(
@@ -231,7 +242,7 @@ print({str(s) for s, p, o in result_graph})
 ### SELECT — retrieve related IRIs only
 
 ```python
-from pymos.store import run_owlready2
+from omny.store import run_owlready2
 
 q_select = class_relations_query(
     "<http://example.org/Pizza>",
@@ -249,7 +260,7 @@ print([str(r[0]) for r in rows])
 ```python
 import io
 import pyoxigraph
-from pymos.store import run_pyoxigraph
+from omny.store import run_pyoxigraph
 
 # Serialise the owlready2 world to N-Triples and load into pyoxigraph
 nt_bytes = onto.world.as_rdflib_graph().serialize(format="nt").encode()
@@ -268,11 +279,11 @@ print([str(s["rel"]) for s in results])
 
 ## Usage D — Render back to Manchester
 
-`pymos.render(onto, prefixes=...)` produces a Manchester OWL syntax document
+`omny.render(onto, prefixes=...)` produces a Manchester OWL syntax document
 from an owlready2 ontology — the round-trip companion to `parse`.
 
 ```python
-import pymos
+import omny
 
 doc = """
 Prefix: : <http://example.org/>
@@ -293,8 +304,8 @@ Individual: margherita1
     Facts: hasTopping cheese1
 """
 
-onto = pymos.parse(doc)
-text = pymos.render(onto, prefixes={
+onto = omny.parse(doc)
+text = omny.render(onto, prefixes={
     "": "http://example.org/",
     "rdfs": "http://www.w3.org/2000/01/rdf-schema#",
 })
@@ -310,7 +321,7 @@ for deterministic diff-friendly output.
 ### Render a single class expression
 
 ```python
-from pymos import parse_expression, render_expression
+from omny import parse_expression, render_expression
 
 prefixes = {"": "http://example.org/"}
 ce = parse_expression("hasTopping some (Cheese or Tomato)", onto, prefixes=prefixes)
@@ -324,8 +335,8 @@ parenthesised inside higher-precedence parents (`and`) automatically.
 ### Round-trip
 
 ```python
-text1 = pymos.render(pymos.parse(doc), prefixes=prefixes)
-text2 = pymos.render(pymos.parse(text1), prefixes=prefixes)
+text1 = omny.render(omny.parse(doc), prefixes=prefixes)
+text2 = omny.render(omny.parse(text1), prefixes=prefixes)
 assert text1 == text2   # idempotent
 ```
 
@@ -336,14 +347,14 @@ IRIs and the count of axioms per entity.
 
 ## Usage E — Navigating the owlready2 model
 
-`pymos.parse()` returns a real **`owlready2.Ontology`**, so the full
-[owlready2 Python OWL API](https://owlready2.readthedocs.io/) applies — pymos
+`omny.parse()` returns a real **`owlready2.Ontology`**, so the full
+[owlready2 Python OWL API](https://owlready2.readthedocs.io/) applies — omny
 adds no separate object API of its own.  Once an ontology is parsed you can
 walk the class hierarchy, inspect axioms, list instances, and read property
 characteristics directly.
 
 ```python
-import pymos
+import omny
 
 doc = """
 Prefix: : <http://example.org/>
@@ -363,7 +374,7 @@ ObjectProperty: hasTopping
 Individual: m1
     Types: Margherita
 """
-onto = pymos.parse(doc)
+onto = omny.parse(doc)
 Pizza = onto.world["http://example.org/Pizza"]
 hasT  = onto.world["http://example.org/hasTopping"]
 
@@ -395,7 +406,7 @@ materialise them first — see *Reasoning* below and notebook
 
 ## Reasoning
 
-pymos itself is reasoner-free, but the owlready2 ontology it returns can be
+omny itself is reasoner-free, but the owlready2 ontology it returns can be
 fed to any reasoner that integrates with owlready2 or with an RDF graph:
 
 | Reasoner | Profile | Wrapper | Java? |
@@ -408,18 +419,18 @@ fed to any reasoner that integrates with owlready2 or with an RDF graph:
 The simplest pattern uses **owlrl** in-process — pure Python, no Java:
 
 ```python
-import io, pymos, owlrl, rdflib
+import io, omny, owlrl, rdflib
 
-onto = pymos.parse(open("ontology.omn").read())
+onto = omny.parse(open("ontology.omn").read())
 
 # owlready2 → rdflib graph → expand under OWL 2 RL semantics
 buf = io.BytesIO(); onto.save(file=buf, format="ntriples")
 g = rdflib.Graph(); g.parse(data=buf.getvalue(), format="nt")
 owlrl.DeductiveClosure(owlrl.OWLRL_Semantics).expand(g)
 
-# Query the saturated graph with the same pymos.class_relations_query
-from pymos import class_relations_query
-from pymos.store import run_rdflib
+# Query the saturated graph with the same omny.class_relations_query
+from omny import class_relations_query
+from omny.store import run_rdflib
 q = class_relations_query("<http://example.org/Pizza>", relations=("sub",))
 inferred = run_rdflib(q, g)
 ```
@@ -461,12 +472,12 @@ target. Parse the expression first with `parse_expression`, then pass the return
 owlready2 construct directly:
 
 ```python
-import pymos
-from pymos import class_relations_query
-from pymos.store import run_rdflib
+import omny
+from omny import class_relations_query
+from omny.store import run_rdflib
 
-onto = pymos.parse(open("pizza.omn").read())
-expr = pymos.parse_expression(
+onto = omny.parse(open("pizza.omn").read())
+expr = omny.parse_expression(
     "hasTopping only (Cheese or Tomato)",
     onto,
     prefixes={"": "http://ex.org/"},   # see note below
@@ -508,7 +519,7 @@ ontology declares a `Prefix: :` that differs from its `Ontology: <...>` IRI —
 which is common — pass the empty-prefix mapping explicitly:
 
 ```python
-expr = pymos.parse_expression(
+expr = omny.parse_expression(
     "hasTopping only (Cheese or Tomato)",
     onto,
     prefixes={"": "http://ex.org/"},
@@ -523,9 +534,9 @@ no rows.
 
 ## Caveats
 
-- **No Java required.** `pymos` is pure Python; it does not call a DL reasoner or
+- **No Java required.** `omny` is pure Python; it does not call a DL reasoner or
   require an OWL API JVM.
-- **Asserted graph only, no reasoning.** `pymos` loads and queries only the explicitly
+- **Asserted graph only, no reasoning.** `omny` loads and queries only the explicitly
   stated axioms.  Inferred subclass / equivalence relations are not visible unless
   a reasoner has already materialised them into the graph.
 - **CONSTRUCT returns full outgoing subgraphs.** A CONSTRUCT query retrieves not just

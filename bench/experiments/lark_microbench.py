@@ -1,7 +1,7 @@
 """Lark vs parsimonious microbenchmark on a single Manchester expression.
 
 This file is the **historical exploration** that motivated PR #45
-(``pymos/_lark_parser.py``). The production swap is done — keep this
+(``omny/_lark_parser.py``). The production swap is done — keep this
 around as a regression check on the parser-internal cost only.
 
 Result on this host (2026-06-01, master at 1ca6765):
@@ -77,7 +77,7 @@ EXPR = "(hasTopping some Cheese) and (not (hasTopping some Meat)) and {a, b, c}"
 
 
 def main(iters: int = 10_000, runs: int = 3) -> None:
-    from pymos.grammar import MANCHESTER_GRAMMAR
+    from omny.grammar import MANCHESTER_GRAMMAR
     parser = Lark(GRAMMAR, parser="lalr", start="start")
 
     # Sanity: both parse the same expression

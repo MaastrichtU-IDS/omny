@@ -30,16 +30,16 @@ from bench.backends.pyoxigraph_mem import PyoxigraphMemBackend
 
 
 def test_pick_targets_returns_three(pizza_text):
-    import pymos
-    onto = pymos.parse(pizza_text)
+    import omny
+    onto = omny.parse(pizza_text)
     targets = pick_targets(onto, k=3)
     assert len(targets) == 3
     assert all(t.startswith("http") for t in targets)
 
 
 def test_bench_query_super_construct(pizza_text):
-    import pymos
-    onto = pymos.parse(pizza_text)
+    import omny
+    onto = omny.parse(pizza_text)
     targets = pick_targets(onto, k=1)
     backend = PyoxigraphMemBackend()
     backend.load(onto)

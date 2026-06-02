@@ -4,9 +4,9 @@ from pathlib import Path
 import pyoxigraph
 import rdflib
 
-import pymos
-from pymos import parse, class_relations_query
-from pymos.store import run_rdflib, run_pyoxigraph
+import omny
+from omny import parse, class_relations_query
+from omny.store import run_rdflib, run_pyoxigraph
 
 
 def _build_doc():
@@ -90,7 +90,7 @@ def test_direct_sub_excludes_transitive():
 
 def _pizza_onto():
     text = Path("tests/data/pizza.omn").read_text()
-    return pymos.parse(text)
+    return omny.parse(text)
 
 
 def _pyox_store(onto):
@@ -112,7 +112,7 @@ _PIZZA_NS = {"": "http://ex.org/"}
 def test_anonymous_equiv_finds_named_class_rdflib():
     onto = _pizza_onto()
     # Margherita EquivalentTo: hasTopping only (Cheese or Tomato)
-    expr = pymos.parse_expression(
+    expr = omny.parse_expression(
         "hasTopping only (Cheese or Tomato)", onto, prefixes=_PIZZA_NS
     )
     q = class_relations_query(expr, relations=("equiv",), construct=False)
@@ -122,7 +122,7 @@ def test_anonymous_equiv_finds_named_class_rdflib():
 
 def test_anonymous_equiv_finds_named_class_pyoxigraph():
     onto = _pizza_onto()
-    expr = pymos.parse_expression(
+    expr = omny.parse_expression(
         "hasTopping only (Cheese or Tomato)", onto, prefixes=_PIZZA_NS
     )
     q = class_relations_query(expr, relations=("equiv",), construct=False)
@@ -133,11 +133,11 @@ def test_anonymous_equiv_finds_named_class_pyoxigraph():
 
 def test_anonymous_equiv_owlready2_select():
     onto = _pizza_onto()
-    expr = pymos.parse_expression(
+    expr = omny.parse_expression(
         "hasTopping only (Cheese or Tomato)", onto, prefixes=_PIZZA_NS
     )
     q = class_relations_query(expr, relations=("equiv",), construct=False)
-    from pymos.store import run_owlready2
+    from omny.store import run_owlready2
     rows = {r[0].iri for r in run_owlready2(q, onto.world)}
     assert "http://ex.org/Margherita" in rows
 

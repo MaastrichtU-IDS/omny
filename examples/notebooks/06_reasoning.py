@@ -1,7 +1,7 @@
 # %% [markdown]
-# # 06 — Reasoning over a pymos-parsed ontology
+# # 06 — Reasoning over a omny-parsed ontology
 #
-# `pymos.parse()` returns a regular `owlready2.Ontology`, so any reasoner that
+# `omny.parse()` returns a regular `owlready2.Ontology`, so any reasoner that
 # integrates with owlready2 or with an RDF graph works on it.  This notebook
 # walks through two reasoners side-by-side on the same ontology and compares
 # their effect on `.descendants()` / `.ancestors()` / `.instances()`:
@@ -14,16 +14,16 @@
 # (ROBOT-docker and konclude-docker); the same pattern applies if you want to
 # add those reasoners to your own pipeline.
 #
-# **No reasoning by default.**  pymos itself is reasoner-free — `pymos.parse()`
+# **No reasoning by default.**  omny itself is reasoner-free — `omny.parse()`
 # produces only the asserted axioms.  Any inference below is the reasoner's
-# work, not pymos's.
+# work, not omny's.
 
 # %%
 import io
-import pymos
+import omny
 import owlready2
 
-print("pymos:    ", pymos.__version__)
+print("omny:    ", omny.__version__)
 print("owlready2:", owlready2.VERSION)
 
 # %% [markdown]
@@ -67,7 +67,7 @@ Individual: myPizza1
     Types: MyPizza
 """
 
-onto = pymos.parse(DOC)
+onto = omny.parse(DOC)
 NS = "http://ex.org/"
 
 Pizza            = onto.world[NS + "Pizza"]
@@ -111,7 +111,7 @@ show(asserted)
 #
 # `owlrl` operates on an `rdflib.Graph`.  Round-trip the owlready2 ontology
 # through N-Triples, expand under OWL 2 RL semantics, then check what the
-# pymos `class_relations_query` returns against the saturated graph.
+# omny `class_relations_query` returns against the saturated graph.
 #
 # **Note**: owlrl is an OWL 2 RL reasoner, not full DL.  Some DL-flavoured
 # inferences (notably equivalent-class chains via existential restrictions)
@@ -121,8 +121,8 @@ show(asserted)
 import owlrl
 import rdflib
 
-from pymos import class_relations_query
-from pymos.store import run_rdflib
+from omny import class_relations_query
+from omny.store import run_rdflib
 
 # owlready2 → ntriples → rdflib.Graph
 buf = io.BytesIO()
@@ -134,7 +134,7 @@ print("triples before owlrl:", len(g))
 owlrl.DeductiveClosure(owlrl.OWLRL_Semantics).expand(g)
 print("triples after  owlrl:", len(g))
 
-# Query the saturated graph with the same SPARQL pymos would build for
+# Query the saturated graph with the same SPARQL omny would build for
 # Pizza's subclasses — anything the reasoner inferred shows up here.
 q = class_relations_query(f"<{NS}Pizza>", relations=("sub",), construct=False)
 inferred_subs = sorted(str(r[0]).rsplit("/", 1)[-1] for r in run_rdflib(q, g))
@@ -151,7 +151,7 @@ print("owlrl Pizza subclasses (via SPARQL):", inferred_subs)
 # enough that HermiT completes in well under a second.
 
 # %%
-# Run HermiT.  Pass `onto.world` explicitly — `pymos.parse()` creates a
+# Run HermiT.  Pass `onto.world` explicitly — `omny.parse()` creates a
 # fresh `World()` rather than mutating owlready2's `default_world`, so the
 # default-world `sync_reasoner_hermit()` call would be a no-op against our
 # ontology.  `infer_property_values=True` materializes inferred property
@@ -183,7 +183,7 @@ for k in keys:
 # `[MozzarellaPizza]` to include `MyPizza`, and `MozzarellaPizza.instances`
 # now contains `myPizza1`.
 #
-# ## Other reasoners pymos integrates with
+# ## Other reasoners omny integrates with
 #
 # - **`owlready2.sync_reasoner_pellet()`** — same JPype pattern as HermiT, full
 #   DL.
@@ -195,17 +195,17 @@ for k in keys:
 #
 # All four are implemented and unit-tested in the perf-bench harness; the
 # integration pattern is the same — call the reasoner on an .omn/.owx file,
-# load the result back via `pymos.parse` (or directly into an RDF store) and
+# load the result back via `omny.parse` (or directly into an RDF store) and
 # query with `class_relations_query`.
 
 # %% [markdown]
 # ## Takeaway
 #
-# - pymos itself does no reasoning — every inference above is the reasoner's.
-# - Because `pymos.parse()` returns an `owlready2.Ontology`, you get the full
+# - omny itself does no reasoning — every inference above is the reasoner's.
+# - Because `omny.parse()` returns an `owlready2.Ontology`, you get the full
 #   `.descendants()` / `.ancestors()` / `.instances()` / `.equivalent_to` API
 #   and any reasoner integration owlready2 already supports.
-# - The same `pymos.class_relations_query` works against asserted graphs,
+# - The same `omny.class_relations_query` works against asserted graphs,
 #   owlrl-saturated graphs, and HermiT-saturated worlds — pick the reasoner
 #   that fits your profile (RL / EL / DL) and runtime constraints (Python
 #   only / JDK / docker).

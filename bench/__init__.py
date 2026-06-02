@@ -1,1 +1,1 @@
-"""pymos performance benchmark harness."""
+"""omny performance benchmark harness."""

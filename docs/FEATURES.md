@@ -1,4 +1,4 @@
-# pymos — full feature reference
+# omny — full feature reference
 
 For the gentle introduction, see the [README](../README.md).
 This page is the *exhaustive* inventory: which Manchester constructs the
@@ -26,7 +26,7 @@ every backend runner, every Jupyter magic.
 - `\"` and `\\` escapes inside string literals are honoured (lossless
   round-trip with the renderer).
 - Returns a real `owlready2.Ontology` — the full owlready2 Python API
-  (class hierarchy, axioms, instances, characteristics) applies; pymos
+  (class hierarchy, axioms, instances, characteristics) applies; omny
   adds no separate object model of its own.
 
 ## Renderer — owlready2 → Manchester, round-trip stable
@@ -62,12 +62,12 @@ every backend runner, every Jupyter magic.
   raises clearly on CONSTRUCT with guidance).
 - `run_endpoint(q, url)` — remote SPARQL endpoint via SPARQLWrapper;
   Turtle for CONSTRUCT, JSON for SELECT.
-- Each runner imports its backend lazily — pymos itself depends only on
+- Each runner imports its backend lazily — omny itself depends only on
   `parsimonious` + `owlready2`.
 
 ## Jupyter — interactive MOS authoring (optional)
 
-- `%load_ext pymos.jupyter` enables:
+- `%load_ext omny.jupyter` enables:
   `%%mos` (parse a cell as Manchester and merge into the active ontology),
   `%%mos_query <relation>` (run a class-relation SPARQL),
   `%reason [pellet]` (materialise inferences via owlready2's reasoner bridge),

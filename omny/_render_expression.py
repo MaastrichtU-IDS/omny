@@ -1,8 +1,8 @@
 """owlready2 class expression -> Manchester syntax string.
 
-The expression-rendering layer. The frame/document layer in ``pymos.render``
-imports from this module; users normally call ``pymos.render_expression``
-(re-exported via ``pymos.render`` for backward compatibility).
+The expression-rendering layer. The frame/document layer in ``omny.render``
+imports from this module; users normally call ``omny.render_expression``
+(re-exported via ``omny.render`` for backward compatibility).
 """
 from typing import Dict, Optional
 

@@ -1,14 +1,14 @@
 """owlready2 -> Manchester rendering: frame and document layers.
 
-The class-expression layer lives in ``pymos._render_expression`` and is
-re-exported here so ``from pymos.render import render_expression`` keeps
+The class-expression layer lives in ``omny._render_expression`` and is
+re-exported here so ``from omny.render import render_expression`` keeps
 working for existing callers.
 """
 from typing import Dict, Iterable, Optional
 
 import owlready2
 
-from pymos._render_expression import (
+from omny._render_expression import (
     render_expression,
     _escape_str,
     _name,

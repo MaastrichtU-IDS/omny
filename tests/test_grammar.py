@@ -1,5 +1,5 @@
 import pytest
-from pymos.grammar import MANCHESTER_GRAMMAR
+from omny.grammar import MANCHESTER_GRAMMAR
 
 
 @pytest.mark.parametrize("expr", [

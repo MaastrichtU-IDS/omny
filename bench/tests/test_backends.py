@@ -1,4 +1,4 @@
-from pymos import parse
+from omny import parse
 from bench.backends.owlready2_mem import OwlreadyMemBackend
 from bench.backends.pyoxigraph_mem import PyoxigraphMemBackend
 from bench.backends.rdflib_mem import RdflibMemBackend

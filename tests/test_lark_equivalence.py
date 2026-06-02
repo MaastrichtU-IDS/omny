@@ -3,14 +3,14 @@ the same owlready2 object whether parsed by the parsimonious backend or
 the lark backend.
 
 The acceptance criterion for the lark port is: round-trip a parsed
-expression through ``pymos._render_expression.render_expression`` and
+expression through ``omny._render_expression.render_expression`` and
 get the same Manchester text from both backends. That covers structural
 equality of the resulting owlready2 construct without depending on
 ``__eq__`` semantics across the four restriction types lark and
 parsimonious return.
 
 Fixture list exercises every production in
-``pymos/grammar.py``; the corpus-extracted block pulls every
+``omny/grammar.py``; the corpus-extracted block pulls every
 SubClassOf/EquivalentTo operand from the bundled fixtures so we don't
 fool ourselves with a hand-curated test set.
 
@@ -24,18 +24,18 @@ from typing import Dict, Iterable, Tuple
 
 import pytest
 
-import pymos
-from pymos._render_expression import render_expression
-from pymos.parser import parse_expression as parse_parsimonious
+import omny
+from omny._render_expression import render_expression
+from omny.parser import parse_expression as parse_parsimonious
 
 try:
-    from pymos._lark_parser import parse_expression_lark
+    from omny._lark_parser import parse_expression_lark
     _HAS_LARK = True
 except ImportError:
     _HAS_LARK = False
 
 
-# Every production in pymos/grammar.py covered at least once.
+# Every production in omny/grammar.py covered at least once.
 EXPR_FIXTURES = [
     # bare IRIs in three forms
     "Pizza",
@@ -91,7 +91,7 @@ def _setup_world():
     """One world per test gets a fresh ontology + pre-declared entities
     so both backends resolve the same prefixed/simple names.
     """
-    onto = pymos.parse("""
+    onto = omny.parse("""
     Prefix: : <http://ex.org/>
     Prefix: xsd: <http://www.w3.org/2001/XMLSchema#>
     Class: Pizza
@@ -147,7 +147,7 @@ def _iter_corpus_expression_strings(omn_path: str,
     so the source corpus is real, not synthetic.
     """
     text = open(omn_path).read()
-    onto = pymos.parse(text)
+    onto = omny.parse(text)
     for cls in onto.classes():
         for parent in cls.is_a:
             if not hasattr(parent, "iri"):

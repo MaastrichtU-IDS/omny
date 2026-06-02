@@ -1,13 +1,13 @@
 import pytest
 import owlready2
-from pymos.entities import EntityResolver
+from omny.entities import EntityResolver
 
 
 def test_get_or_create_class_by_simple_name(onto):
     r = EntityResolver(onto, prefixes={})
     A = r.get_class("Pizza")
     assert isinstance(A, owlready2.ThingClass)
-    assert A.iri == "http://pymos.test/onto.owl#Pizza"
+    assert A.iri == "http://omny.test/onto.owl#Pizza"
     # idempotent: same name returns same entity
     assert r.get_class("Pizza") is A
 

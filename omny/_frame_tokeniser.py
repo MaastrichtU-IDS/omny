@@ -1,7 +1,7 @@
 """Pure tokeniser/regex helpers for the Manchester OWL document parser.
 
 These are module-level constants and stateless functions extracted from
-``pymos/frames.py``. They have no dependency on ``FrameLoader``,
+``omny/frames.py``. They have no dependency on ``FrameLoader``,
 ``EntityResolver``, or owlready2, so they can be tested and reasoned about
 in isolation.
 """

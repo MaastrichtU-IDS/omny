@@ -1,21 +1,21 @@
-"""Parse workload: pymos.parse() on an .omn file.
+"""Parse workload: omny.parse() on an .omn file.
 
 Two functions surface here: the default ``_do_parse`` calls
-:func:`pymos.parse` as a library user would — which, post-PR #45,
+:func:`omny.parse` as a library user would — which, post-PR #45,
 uses the lark backend internally. ``_do_parse_parsimonious`` monkey-
-patches ``pymos.frames.ManchesterParser`` back to the legacy
+patches ``omny.frames.ManchesterParser`` back to the legacy
 parsimonious-based parser for head-to-head backend benchmarking.
 """
 from pathlib import Path
 
-import pymos
+import omny
 
 from bench.measure import Measurement, measure_in_subprocess
 
 
 def _do_parse(path: str) -> None:
     """Parse a .omn file with the default backend (lark since PR #45)."""
-    pymos.parse(Path(path).read_text())
+    omny.parse(Path(path).read_text())
 
 
 def _do_parse_parsimonious(path: str) -> None:
@@ -25,18 +25,18 @@ def _do_parse_parsimonious(path: str) -> None:
     parser implementation on the same workload — anything in the
     snapshot CSV marked ``backend=parsimonious`` came through here.
     """
-    import pymos.frames as fr
-    from pymos.parser import ManchesterParser as _PP
+    import omny.frames as fr
+    from omny.parser import ManchesterParser as _PP
     saved = fr.ManchesterParser
     fr.ManchesterParser = _PP
     try:
-        pymos.parse(Path(path).read_text())
+        omny.parse(Path(path).read_text())
     finally:
         fr.ManchesterParser = saved
 
 
 def _count_axioms(path: str) -> int:
-    onto = pymos.parse(Path(path).read_text())
+    onto = omny.parse(Path(path).read_text())
     n = 0
     for c in onto.classes():
         n += len([s for s in c.is_a if s is not __import__("owlready2").Thing])
@@ -61,7 +61,7 @@ def bench_parse(path: str, *, hot_iters: int = 3, warmup: int = 1) -> Measuremen
 def bench_parse_backend(path: str, backend: str, *,
                         hot_iters: int = 3, warmup: int = 1,
                         timeout: float = 600.0) -> Measurement:
-    """Run :func:`pymos.parse` with an explicit parser backend.
+    """Run :func:`omny.parse` with an explicit parser backend.
 
     Args:
         path: .omn file to parse.

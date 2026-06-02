@@ -1,17 +1,17 @@
 # %% [markdown]
-# # 01 — Parsing Manchester syntax with pymos
+# # 01 — Parsing Manchester syntax with omny
 #
-# `pymos` loads a Manchester OWL Syntax (`.omn`) document directly into an
+# `omny` loads a Manchester OWL Syntax (`.omn`) document directly into an
 # [owlready2](https://owlready2.readthedocs.io/) ontology — **pure Python, no Java,
 # no OWL API JVM**. This notebook covers the two parsing entry points:
 #
-# 1. `pymos.parse(doc)` — parse a whole document into an ontology.
-# 2. `pymos.parse_expression(expr, onto)` — parse a single class expression.
+# 1. `omny.parse(doc)` — parse a whole document into an ontology.
+# 2. `omny.parse_expression(expr, onto)` — parse a single class expression.
 
 # %%
-import pymos
+import omny
 
-print("pymos version:", pymos.__version__)
+print("omny version:", omny.__version__)
 
 # %% [markdown]
 # ## Parse a document
@@ -34,7 +34,7 @@ Class: Antibiotic
     EquivalentTo: Drug and (treats some BacterialInfection)
 """
 
-onto = pymos.parse(doc)
+onto = omny.parse(doc)
 type(onto)  # owlready2.namespace.Ontology
 
 # %% [markdown]
@@ -77,7 +77,7 @@ with expr_onto:
     class Disease(owlready2.Thing):
         pass
 
-expr = pymos.parse_expression("treats some Disease", expr_onto)
+expr = omny.parse_expression("treats some Disease", expr_onto)
 print(expr)
 print(type(expr))  # owlready2 Restriction
 

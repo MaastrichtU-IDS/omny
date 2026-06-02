@@ -1,4 +1,4 @@
-"""IPython magics for interactive MOS authoring of a pymos ontology.
+"""IPython magics for interactive MOS authoring of a omny ontology.
 
 Provides:
 
@@ -12,7 +12,7 @@ Provides:
 - ``%mos_save``     — render the whole active ontology back to Manchester syntax
                       and write it to a file.
 
-Load with ``%load_ext pymos.jupyter``. The active ontology is exposed in the
+Load with ``%load_ext omny.jupyter``. The active ontology is exposed in the
 user namespace as ``mos_onto`` and ``mos_world``; ``mos_reset()`` clears it.
 """
 from __future__ import annotations
@@ -21,12 +21,12 @@ from __future__ import annotations
 import owlready2
 from IPython.display import display
 
-import pymos
-from pymos.sparql import RELATIONS, class_relations_query
-from pymos.store import run_rdflib
+import omny
+from omny.sparql import RELATIONS, class_relations_query
+from omny.store import run_rdflib
 
 
-_DEFAULT_BASE = "http://pymos.test/notebook"
+_DEFAULT_BASE = "http://omny.test/notebook"
 
 
 class _State:
@@ -47,7 +47,7 @@ _state = _State()
 
 def _mos_magic(line: str, cell: str) -> None:
     """%%mos — parse cell as Manchester syntax and merge into the active ontology."""
-    pymos.parse(cell, onto=_state.onto)
+    omny.parse(cell, onto=_state.onto)
 
 
 def _reason_magic(line: str) -> None:
@@ -83,7 +83,7 @@ def _mos_query_magic(line: str, cell: str) -> None:
         return
     base = _state.onto.base_iri
     prefixes = {"": base if base.endswith(("/", "#")) else base + "#"}
-    expr = pymos.parse_expression(cell.strip(), _state.onto, prefixes=prefixes)
+    expr = omny.parse_expression(cell.strip(), _state.onto, prefixes=prefixes)
     q = class_relations_query(expr, relations=(rel,), construct=False)
     rows = list(run_rdflib(q, _state.onto.world.as_rdflib_graph()))
     if not rows:
@@ -125,7 +125,7 @@ def _mos_show_magic(line: str) -> None:
         return
     base = _state.onto.base_iri
     prefixes = {"": base if base.endswith(("/", "#")) else base + "#"}
-    print(pymos.render_frame(entity, prefixes=prefixes))
+    print(omny.render_frame(entity, prefixes=prefixes))
 
 
 def _mos_save_magic(line: str) -> None:
@@ -136,17 +136,17 @@ def _mos_save_magic(line: str) -> None:
         return
     base = _state.onto.base_iri
     prefixes = {"": base if base.endswith(("/", "#")) else base + "#"}
-    text = pymos.render(_state.onto, prefixes=prefixes)
+    text = omny.render(_state.onto, prefixes=prefixes)
     with open(path, "w") as f:
         f.write(text)
     print(f"wrote {path}")
 
 
 # Tab-completion: keyword/operator constants + the cell-classifier + ``_mos_complete``
-# live in ``pymos._jupyter_complete``. Re-exported here so existing
-# ``from pymos.jupyter import _mos_complete`` / ``_register_completer`` callers
+# live in ``omny._jupyter_complete``. Re-exported here so existing
+# ``from omny.jupyter import _mos_complete`` / ``_register_completer`` callers
 # (and tests/test_jupyter_magics.py) keep working unchanged.
-from pymos._jupyter_complete import _mos_complete  # noqa: E402  (re-export)
+from omny._jupyter_complete import _mos_complete  # noqa: E402  (re-export)
 
 
 def _register_completer(ip) -> None:
@@ -168,7 +168,7 @@ def _register_completer(ip) -> None:
 
 
 _CODEMIRROR_JS = r"""
-// pymos-manchester CodeMirror mode (registered at notebook startup).
+// omny-manchester CodeMirror mode (registered at notebook startup).
 // JupyterLab 4 uses CodeMirror 6; we register a StreamLanguage via
 // @codemirror/legacy-modes/mode/simple-mode-style tokens.  The simple-mode
 // path keeps the implementation compact — full LSP-grade highlighting is
@@ -197,10 +197,10 @@ _CODEMIRROR_JS = r"""
       };
       const mode = simpleMode.simpleMode(states);
       const language = lang.StreamLanguage.define(mode);
-      window.__pymosManchesterMode = language;
-      console.log('pymos: manchester-syntax CodeMirror mode registered');
+      window.__omnyManchesterMode = language;
+      console.log('omny: manchester-syntax CodeMirror mode registered');
     } catch (e) {
-      console.warn('pymos: failed to register manchester-syntax mode', e);
+      console.warn('omny: failed to register manchester-syntax mode', e);
     }
   });
 })();
@@ -224,7 +224,7 @@ def _inject_codemirror_mode() -> None:
 
 
 def load_ipython_extension(ip) -> None:
-    """Called by IPython when ``%load_ext pymos.jupyter`` runs."""
+    """Called by IPython when ``%load_ext omny.jupyter`` runs."""
     ip.register_magic_function(_mos_magic, magic_kind="cell", magic_name="mos")
     ip.register_magic_function(_reason_magic, magic_kind="line", magic_name="reason")
     ip.register_magic_function(_mos_query_magic, magic_kind="cell", magic_name="mos_query")
@@ -238,7 +238,7 @@ def load_ipython_extension(ip) -> None:
 
 
 def unload_ipython_extension(ip) -> None:
-    """Called by IPython when ``%unload_ext pymos.jupyter`` runs.
+    """Called by IPython when ``%unload_ext omny.jupyter`` runs.
 
     Without this hook, ``ExtensionManager.unload_extension`` reports
     ``"no unload function"`` and leaves the module in ``ip.extension_manager.loaded``,

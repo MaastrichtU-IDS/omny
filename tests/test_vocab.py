@@ -1,4 +1,4 @@
-from pymos.vocab import STRUCTURAL_PATH, PREFIXES
+from omny.vocab import STRUCTURAL_PATH, PREFIXES
 
 
 def test_structural_path_is_a_property_path_alternation():

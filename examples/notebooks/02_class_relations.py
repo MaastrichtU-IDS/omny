@@ -6,17 +6,17 @@
 # SPARQL-capable backend. Here we load the biomedical ontology and compare three
 # in-process runners.
 #
-# > **Asserted graph only.** pymos does not run a reasoner; it queries the explicitly
+# > **Asserted graph only.** omny does not run a reasoner; it queries the explicitly
 # > stated axioms.
 
 # %%
 from pathlib import Path
 
-import pymos
-from pymos import class_relations_query
+import omny
+from omny import class_relations_query
 
 omn = Path("/workspace/examples/data/biomed.omn").read_text()
-onto = pymos.parse(omn)
+onto = omny.parse(omn)
 NS = "http://example.org/biomed#"
 print("Loaded", len(list(onto.classes())), "classes")
 
@@ -36,7 +36,7 @@ print("Loaded", len(list(onto.classes())), "classes")
 # We use the owlready2 built-in engine (SELECT-only) as the first runner.
 
 # %%
-from pymos.store import run_owlready2
+from omny.store import run_owlready2
 
 def select_iris(target_local, relations):
     q = class_relations_query(f"<{NS}{target_local}>", relations=relations, construct=False)
@@ -63,7 +63,7 @@ print("BacterialInfection individuals:", select_iris("BacterialInfection", ("ind
 import io
 
 import pyoxigraph
-from pymos.store import run_rdflib, run_pyoxigraph
+from omny.store import run_rdflib, run_pyoxigraph
 
 q = class_relations_query(f"<{NS}Disease>", relations=("sub",), construct=False)
 

@@ -11,10 +11,10 @@
 # %%
 from pathlib import Path
 
-import pymos
-from pymos import class_relations_query
+import omny
+from omny import class_relations_query
 
-onto = pymos.parse(Path("/workspace/examples/data/biomed.omn").read_text())
+onto = omny.parse(Path("/workspace/examples/data/biomed.omn").read_text())
 NS = "http://example.org/biomed#"
 
 # %% [markdown]
@@ -58,7 +58,7 @@ r.raise_for_status()
 print("Triples in store:", r.json()["results"]["bindings"][0]["n"]["value"])
 
 # %% [markdown]
-# ## Query the remote endpoint with pymos
+# ## Query the remote endpoint with omny
 #
 # `run_endpoint` sends the generated SPARQL to the live HTTP endpoint and returns
 # the SPARQL 1.1 JSON results object (a dict with `head` and `results`). For a
@@ -66,7 +66,7 @@ print("Triples in store:", r.json()["results"]["bindings"][0]["n"]["value"])
 # projected variable (here `?rel`).
 
 # %%
-from pymos.store import run_endpoint
+from omny.store import run_endpoint
 
 q = class_relations_query(f"<{NS}Disease>", relations=("sub",), construct=False)
 results = run_endpoint(q, f"{OXI}/query")
@@ -79,6 +79,6 @@ for b in bindings:
 # %% [markdown]
 # ## Takeaway
 #
-# pymos parsed Manchester syntax with no Java, and the very same query builder drove
+# omny parsed Manchester syntax with no Java, and the very same query builder drove
 # a real remote SPARQL triplestore. Swap the URL for any SPARQL endpoint
 # (Fuseki, GraphDB, Wikidata, …) and nothing else changes.

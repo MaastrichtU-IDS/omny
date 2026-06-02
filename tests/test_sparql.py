@@ -1,8 +1,8 @@
 import pytest
 import rdflib  # noqa: F401
 
-import pymos
-from pymos.sparql import _relation_clause, _target_term, class_relations_query
+import omny
+from omny.sparql import _relation_clause, _target_term, class_relations_query
 
 
 def _norm(s):
@@ -59,10 +59,10 @@ def test_empty_relations_raises():
 
 
 def test_named_class_accepts_owlready_class(onto):
-    from pymos import parse_expression
+    from omny import parse_expression
     pizza = parse_expression("Pizza", onto)
     q = class_relations_query(pizza, relations=("super",))
-    assert "<http://pymos.test/onto.owl#Pizza>" in q
+    assert "<http://omny.test/onto.owl#Pizza>" in q
 
 
 def test_target_term_named_string():
@@ -72,7 +72,7 @@ def test_target_term_named_string():
 
 
 def test_target_term_owlready_entity():
-    onto = pymos.parse("Prefix: : <http://ex.org/>\nOntology: <http://ex.org/>\nClass: Pizza")
+    onto = omny.parse("Prefix: : <http://ex.org/>\nOntology: <http://ex.org/>\nClass: Pizza")
     pizza = onto.world["http://ex.org/Pizza"]
     var, extra = _target_term(pizza)
     assert var == "<http://ex.org/Pizza>"
@@ -80,13 +80,13 @@ def test_target_term_owlready_entity():
 
 
 def test_target_term_anonymous_construct():
-    onto = pymos.parse("""
+    onto = omny.parse("""
         Prefix: : <http://ex.org/>
         Ontology: <http://ex.org/>
         ObjectProperty: treats
         Class: Drug
     """)
-    expr = pymos.parse_expression("treats some Drug", onto)
+    expr = omny.parse_expression("treats some Drug", onto)
     var, extra = _target_term(expr)
     assert var.startswith("?t")
     assert "owl:Restriction" in extra
@@ -94,14 +94,14 @@ def test_target_term_anonymous_construct():
 
 
 def test_anonymous_target_query_builds_and_parses():
-    onto = pymos.parse("""
+    onto = omny.parse("""
         Prefix: : <http://ex.org/>
         Ontology: <http://ex.org/>
         ObjectProperty: treats
         Class: Drug
         Class: Disease
     """)
-    expr = pymos.parse_expression("Drug and (treats some Disease)", onto)
+    expr = omny.parse_expression("Drug and (treats some Disease)", onto)
     q = class_relations_query(expr, relations=("equiv",), construct=False)
     from rdflib.plugins.sparql import prepareQuery
     prepareQuery(q)  # must parse as valid SPARQL

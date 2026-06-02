@@ -1,7 +1,7 @@
 import pytest
 
-import pymos
-from pymos.pattern import expression_to_pattern
+import omny
+from omny.pattern import expression_to_pattern
 
 
 def _norm(s):
@@ -9,7 +9,7 @@ def _norm(s):
 
 
 def _parse(expr_text):
-    onto = pymos.parse("""
+    onto = omny.parse("""
         Prefix: : <http://ex.org/>
         Ontology: <http://ex.org/>
         ObjectProperty: treats
@@ -19,7 +19,7 @@ def _parse(expr_text):
         Class: Cheese
         Class: Tomato
     """)
-    return onto, pymos.parse_expression(expr_text, onto)
+    return onto, omny.parse_expression(expr_text, onto)
 
 
 def test_some_values_from():
@@ -45,14 +45,14 @@ def test_all_values_from():
 
 
 def test_has_value_individual():
-    onto = pymos.parse("""
+    onto = omny.parse("""
         Prefix: : <http://ex.org/>
         Ontology: <http://ex.org/>
         ObjectProperty: hasTopping
         Class: Cheese
         Individual: myCheese Types: Cheese
     """)
-    expr = pymos.parse_expression("hasTopping value myCheese", onto)
+    expr = omny.parse_expression("hasTopping value myCheese", onto)
     var, pattern = expression_to_pattern(expr)
     assert var == "?t0"
     assert _norm(pattern) == _norm(
@@ -63,12 +63,12 @@ def test_has_value_individual():
 
 
 def test_self_restriction():
-    onto = pymos.parse("""
+    onto = omny.parse("""
         Prefix: : <http://ex.org/>
         Ontology: <http://ex.org/>
         ObjectProperty: hasPart
     """)
-    expr = pymos.parse_expression("hasPart Self", onto)
+    expr = omny.parse_expression("hasPart Self", onto)
     var, pattern = expression_to_pattern(expr)
     assert var == "?t0"
     assert _norm(pattern) == _norm(
@@ -79,13 +79,13 @@ def test_self_restriction():
 
 
 def test_qualified_exactly():
-    onto = pymos.parse("""
+    onto = omny.parse("""
         Prefix: : <http://ex.org/>
         Ontology: <http://ex.org/>
         ObjectProperty: hasTopping
         Class: Cheese
     """)
-    expr = pymos.parse_expression("hasTopping exactly 2 Cheese", onto)
+    expr = omny.parse_expression("hasTopping exactly 2 Cheese", onto)
     var, pattern = expression_to_pattern(expr)
     assert var == "?t0"
     assert _norm(pattern) == _norm(
@@ -97,7 +97,7 @@ def test_qualified_exactly():
 
 
 def test_unqualified_min():
-    onto = pymos.parse("""
+    onto = omny.parse("""
         Prefix: : <http://ex.org/>
         Ontology: <http://ex.org/>
         ObjectProperty: hasTopping
@@ -116,13 +116,13 @@ def test_unqualified_min():
 
 
 def test_qualified_max():
-    onto = pymos.parse("""
+    onto = omny.parse("""
         Prefix: : <http://ex.org/>
         Ontology: <http://ex.org/>
         ObjectProperty: hasTopping
         Class: Cheese
     """)
-    expr = pymos.parse_expression("hasTopping max 3 Cheese", onto)
+    expr = omny.parse_expression("hasTopping max 3 Cheese", onto)
     var, pattern = expression_to_pattern(expr)
     assert var == "?t0"
     assert _norm(pattern) == _norm(
@@ -134,13 +134,13 @@ def test_qualified_max():
 
 
 def test_intersection_two_named():
-    onto = pymos.parse("""
+    onto = omny.parse("""
         Prefix: : <http://ex.org/>
         Ontology: <http://ex.org/>
         Class: A
         Class: B
     """)
-    expr = pymos.parse_expression("A and B", onto)
+    expr = omny.parse_expression("A and B", onto)
     var, pattern = expression_to_pattern(expr)
     assert var == "?t0"
     assert _norm(pattern) == _norm(
@@ -152,14 +152,14 @@ def test_intersection_two_named():
 
 
 def test_intersection_named_and_anonymous():
-    onto = pymos.parse("""
+    onto = omny.parse("""
         Prefix: : <http://ex.org/>
         Ontology: <http://ex.org/>
         ObjectProperty: treats
         Class: Drug
         Class: Disease
     """)
-    expr = pymos.parse_expression("Drug and (treats some Disease)", onto)
+    expr = omny.parse_expression("Drug and (treats some Disease)", onto)
     var, pattern = expression_to_pattern(expr)
     assert var == "?t0"
     # ?t0 = intersection node; ?t1 / ?t2 = list spine; ?t3 = nested someValuesFrom restriction.
@@ -175,13 +175,13 @@ def test_intersection_named_and_anonymous():
 
 
 def test_union_two_named():
-    onto = pymos.parse("""
+    onto = omny.parse("""
         Prefix: : <http://ex.org/>
         Ontology: <http://ex.org/>
         Class: A
         Class: B
     """)
-    expr = pymos.parse_expression("A or B", onto)
+    expr = omny.parse_expression("A or B", onto)
     var, pattern = expression_to_pattern(expr)
     assert var == "?t0"
     assert _norm(pattern) == _norm(
@@ -193,12 +193,12 @@ def test_union_two_named():
 
 
 def test_complement_named():
-    onto = pymos.parse("""
+    onto = omny.parse("""
         Prefix: : <http://ex.org/>
         Ontology: <http://ex.org/>
         Class: A
     """)
-    expr = pymos.parse_expression("not A", onto)
+    expr = omny.parse_expression("not A", onto)
     var, pattern = expression_to_pattern(expr)
     assert var == "?t0"
     assert _norm(pattern) == _norm(
@@ -208,13 +208,13 @@ def test_complement_named():
 
 
 def test_complement_anonymous():
-    onto = pymos.parse("""
+    onto = omny.parse("""
         Prefix: : <http://ex.org/>
         Ontology: <http://ex.org/>
         ObjectProperty: treats
         Class: Drug
     """)
-    expr = pymos.parse_expression("not (treats some Drug)", onto)
+    expr = omny.parse_expression("not (treats some Drug)", onto)
     var, pattern = expression_to_pattern(expr)
     assert var == "?t0"
     assert _norm(pattern) == _norm(
@@ -227,13 +227,13 @@ def test_complement_anonymous():
 
 
 def test_inverse_property_some():
-    onto = pymos.parse("""
+    onto = omny.parse("""
         Prefix: : <http://ex.org/>
         Ontology: <http://ex.org/>
         ObjectProperty: hasPart
         Class: A
     """)
-    expr = pymos.parse_expression("inverse hasPart some A", onto)
+    expr = omny.parse_expression("inverse hasPart some A", onto)
     var, pattern = expression_to_pattern(expr)
     assert var == "?t0"
     # ?t1 is the inverse-property blank node bound to owl:onProperty.
@@ -246,7 +246,7 @@ def test_inverse_property_some():
 
 
 def test_one_of():
-    onto = pymos.parse("""
+    onto = omny.parse("""
         Prefix: : <http://ex.org/>
         Ontology: <http://ex.org/>
         Class: Cheese
@@ -254,7 +254,7 @@ def test_one_of():
         Individual: a Types: Cheese
         Individual: b Types: Tomato
     """)
-    expr = pymos.parse_expression("{a, b}", onto)
+    expr = omny.parse_expression("{a, b}", onto)
     var, pattern = expression_to_pattern(expr)
     assert var == "?t0"
     assert _norm(pattern) == _norm(
@@ -274,11 +274,11 @@ def test_unsupported_construct_raises_value_error():
 
 
 def test_has_value_with_literal_raises():
-    onto = pymos.parse("""
+    onto = omny.parse("""
         Prefix: : <http://ex.org/>
         Ontology: <http://ex.org/>
         DataProperty: age
     """)
-    expr = pymos.parse_expression("age value 42", onto)
+    expr = omny.parse_expression("age value 42", onto)
     with pytest.raises(ValueError, match="literal"):
         expression_to_pattern(expr)

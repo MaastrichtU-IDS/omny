@@ -36,8 +36,8 @@ from pathlib import Path
 # We pass a JSON-encoded ``{op, path}`` on argv and print a JSON
 # ``{wall: float, ...extras}`` on stdout. Stays self-contained so it can
 # run inside .venv_rcelebi without importing anything from the parent
-# pymos package (rcelebi's owlready2 has the same module name as
-# upstream's; pymos's compatibility with rcelebi is not part of the
+# omny package (rcelebi's owlready2 has the same module name as
+# upstream's; omny's compatibility with rcelebi is not part of the
 # claim here).
 # ---------------------------------------------------------------------------
 
@@ -96,7 +96,7 @@ def _run_worker(python: str, op: str, path: str) -> dict:
 
 
 def _detect_rdf_input(ontology_name: str) -> Path:
-    """Both forks of owlready2 load RDF/XML directly; .omn is pymos's
+    """Both forks of owlready2 load RDF/XML directly; .omn is omny's
     natural input but not owlready2's. Standardise on .rdfxml for the
     head-to-head when both versions are present."""
     data_dir = Path(__file__).resolve().parents[1] / "data"

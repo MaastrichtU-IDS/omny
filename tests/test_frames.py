@@ -1,7 +1,7 @@
 import rdflib
 import owlready2
 import pytest
-from pymos import parse
+from omny import parse
 
 
 def test_prefix_and_class_frame():
@@ -236,7 +236,7 @@ def test_custom_annotation_property():
 def test_annotation_property_punning_does_not_raise():
     """OWL 2 punning: the same IRI may be used as both an object property
     AND an annotation property (real example: OBO's ``RO_0002433`` in
-    the Human Phenotype Ontology). pymos must accept this without
+    the Human Phenotype Ontology). omny must accept this without
     erroring — the annotation value is stored via owlready2's IRI-keyed
     ``prop[entity]`` view, which keeps the two uses' values apart.
 
@@ -388,7 +388,7 @@ def test_annotation_properties_with_same_local_name_do_not_collide():
 def test_round_trip_does_not_duplicate_annotations():
     """Parse → render → parse → render must reach a fixed point (idempotent
     from the second render onward), not grow each cycle."""
-    import pymos
+    import omny
     doc = """
     Prefix: : <http://ex.org/>
     AnnotationProperty: <http://www.w3.org/2000/01/rdf-schema#comment>
@@ -401,12 +401,12 @@ def test_round_trip_does_not_duplicate_annotations():
                      <http://purl.org/dc/elements/1.1/description> "dc d",
                      <http://purl.org/dc/terms/description> "terms d"
     """
-    o1 = pymos.parse(doc)
-    r1 = pymos.render(o1)
-    o2 = pymos.parse(r1)
-    r2 = pymos.render(o2)
-    o3 = pymos.parse(r2)
-    r3 = pymos.render(o3)
+    o1 = omny.parse(doc)
+    r1 = omny.render(o1)
+    o2 = omny.parse(r1)
+    r2 = omny.render(o2)
+    o3 = omny.parse(r2)
+    r3 = omny.render(o3)
     # The renderer reaches a fixed point — neither round-trip duplicates.
     assert r2 == r3
     # And the second pass's annotation count isn't bigger than the first's.

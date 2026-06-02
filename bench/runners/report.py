@@ -16,10 +16,10 @@ def write_report(results_json: Path, out_md: Path, *, floors: Dict[str, float] |
 
     lines: list[str] = []
     date = env["timestamp"].split()[0]
-    lines.append(f"# Perf snapshot — {date}, pymos")
+    lines.append(f"# Perf snapshot — {date}, omny")
     lines.append("")
     lines.append(f"Host: {env['host']}, {env['platform']}, python {env['python']}.")
-    lines.append(f"pymos: {env['pymos_sha']}.  CPU count: {env['cpu_count']}.")
+    lines.append(f"omny: {env['omny_sha']}.  CPU count: {env['cpu_count']}.")
     lines.append("")
     lines.append("## Headline")
     lines.append("")
