@@ -35,3 +35,50 @@ jobs:
 
       - name: Run test suite
         run: pytest -v
+
+  core-deps-smoke:
+    # Guard against the "user does `pip install omny` with no extras and
+    # something breaks" failure mode (the v0.1.0 → v0.1.1 rdflib bug). The
+    # dev-extras job above wouldn't catch it because dev pulls in rdflib;
+    # this job installs ONLY the declared core dependencies and exercises
+    # the public API end-to-end.
+    name: core-deps install smoke (no extras)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install omny with core deps only
+        run: |
+          python -m pip install --upgrade pip
+          pip install .
+
+      - name: Smoke-test the public API
+        run: |
+          python <<'PY'
+          import omny
+          print(f"omny version: {omny.__version__}")
+          doc = """
+          Prefix: : <http://x/>
+          Class: A
+          Class: B
+              SubClassOf: A
+          ObjectProperty: hasFriend
+          Individual: alice
+              Types: B
+          """
+          onto = omny.parse(doc)
+          text = omny.render(onto)
+          assert omny.render(omny.parse(text)) == text, "round-trip not stable"
+          ce = omny.parse_expression("A", onto)
+          assert omny.render_expression(ce) is not None
+          q = omny.class_relations_query("<http://x/B>", relations=("super",))
+          assert "SELECT" in q or "CONSTRUCT" in q
+          print("parse + render + round-trip + parse_expression + render_expression + class_relations_query: OK")
+          PY
