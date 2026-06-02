@@ -105,6 +105,8 @@ HP (was 2-5× slower than parse pre-fixes; now ~1.5× slower).
 | 2026-06-02 | #45 | parsimonious → lark parser          | HP parse 1.89×   |
 | 2026-06-02 | #46 | bench harness polish (this doc)     | n/a — observability |
 | 2026-06-02 | #47 | `_split_commas` vectorisation        | HP parse 1.09×   |
+| 2026-06-02 | #48 | doc: extend-batching negative result | n/a — record     |
+| 2026-06-02 | #49 | direct-write SubClassOf (named parents) | HP parse+render 1.21-1.31× |
 
 ## 5. Open levers (unchanged from `2026-06-01-fixes.md`)
 
@@ -156,9 +158,20 @@ HP (was 2-5× slower than parse pre-fixes; now ~1.5× slower).
     CallbackList is heavier than expected on the dominant
     real-world case (k=1 single-parent SubClassOf, ~55 % of HP
     classes), enough to overwhelm the savings from batching the
-    minority k≥3 cases.  Approach abandoned; a true fix needs
-    owlready2-internals work (a no-callback `is_a` bulk-set), not
-    a pymos-level rewrite.
+    minority k≥3 cases.  Approach abandoned; see PR #48.
+
+    **Solved in PR #49** by a different angle: direct-write
+    `(cls, rdfs:subClassOf, parent)` triples via
+    `o.graph._add_obj_triple_raw_spo` for **named-class** parents,
+    skipping owlready2's CallbackList entirely, and invalidate the
+    Python cache for those classes at end-of-parse so the next
+    `world[iri]` rebuilds `is_a` from triples in one callback fire
+    per class instead of one per axiom.  Anonymous restrictions still
+    go through the per-item `_safe_append_is_a` path (they have no
+    storid and need the Python construct chain).  Same-host HP
+    parse+render control: **135.7 s → 103.5 s = 1.31×** (POC) or
+    **112 s on the real branch = 1.21×** across separate runs; the
+    range is honest day-to-day variance on this host.
 
 ## Reproduction
 

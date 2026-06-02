@@ -327,6 +327,38 @@ def test_repeated_axiom_keyword_concatenates():
         "restriction SubClassOf was dropped"
 
 
+def test_subclassof_named_and_anonymous_parents_mixed():
+    """Regression for the direct-write SubClassOf path: when a Class frame
+    mixes named-class parents (which go through
+    ``_direct_write_subclassof`` → triple store + lazy reload) with
+    anonymous-restriction parents (which stay on the per-item
+    ``_safe_append_is_a`` path), both kinds must end up in ``is_a``
+    after the end-of-parse invalidation pass.
+    """
+    doc = """
+    Prefix: : <http://ex.org/>
+    Class: Pizza
+    Class: Topping
+    Class: Cheese
+        SubClassOf: Topping
+    ObjectProperty: hasTopping
+    Class: Margherita
+        SubClassOf: Pizza, Cheese, hasTopping some Cheese, hasTopping only Cheese
+    """
+    onto = parse(doc)
+    m = onto.world["http://ex.org/Margherita"]
+    pizza = onto.world["http://ex.org/Pizza"]
+    cheese = onto.world["http://ex.org/Cheese"]
+    # Both named-class parents (direct-write path) must be present.
+    assert pizza in m.is_a, "named parent Pizza missing from is_a (direct-write path)"
+    assert cheese in m.is_a, "named parent Cheese missing from is_a (direct-write path)"
+    # Both anonymous restrictions (per-item path) must still be present.
+    restrictions = [sc for sc in m.is_a if getattr(sc, "property", None) is not None]
+    assert len(restrictions) == 2, (
+        f"expected 2 anonymous restrictions in is_a, got {len(restrictions)}: {m.is_a}"
+    )
+
+
 def test_annotation_properties_with_same_local_name_do_not_collide():
     """Distinct annotation properties whose IRIs share a local name (e.g.
     ``rdfs:comment`` and ``schema.org/comment`` both alias ``entity.comment``)
