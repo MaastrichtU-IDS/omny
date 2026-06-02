@@ -145,6 +145,21 @@ HP (was 2-5× slower than parse pre-fixes; now ~1.5× slower).
     documented lever: now demonstrably 27 % of wall (was 11 % on the
     pre-lark profile). Requires owlready2-internals work.
 
+    Attempted 2026-06-02 (pymos-level) via `is_a.extend(parents)` in
+    place of per-item `is_a.append(parent)` — owlready2 fires
+    `_class_is_a_changed` once per `extend` instead of once per
+    item, so 56 k callback fires would drop to 32 k.  Microbench
+    on freshly-created classes looked promising (1.1× at k=2,
+    4.3× at k=10), but the same-host HP control showed a
+    **1.6× regression** (113 s → 185 s) — confirmed across 2 runs
+    each side.  The per-call extend overhead in owlready2's
+    CallbackList is heavier than expected on the dominant
+    real-world case (k=1 single-parent SubClassOf, ~55 % of HP
+    classes), enough to overwhelm the savings from batching the
+    minority k≥3 cases.  Approach abandoned; a true fix needs
+    owlready2-internals work (a no-callback `is_a` bulk-set), not
+    a pymos-level rewrite.
+
 ## Reproduction
 
 ```bash
