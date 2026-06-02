@@ -302,9 +302,10 @@ class FrameLoader:
     # Frame handlers
     # ------------------------------------------------------------------
 
-    # rdfs:subClassOf — IRI is fixed; the storid is per-world but stable
-    # across all subsequent direct-writes (look up once per loader).
+    # rdfs:subClassOf + rdf:type — IRIs are fixed; the storids are per-world
+    # but stable across all subsequent direct-writes (look up once per loader).
     _RDFS_SUB_CLASS_OF = "http://www.w3.org/2000/01/rdf-schema#subClassOf"
+    _RDF_TYPE = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type"
 
     def _direct_write_subclassof(self, cls, parent) -> None:
         """Write a single ``(cls, rdfs:subClassOf, parent)`` triple straight
@@ -324,6 +325,22 @@ class FrameLoader:
             self._sub_storid = self.r.onto.world._abbreviate(self._RDFS_SUB_CLASS_OF)
         self.r.onto.graph._add_obj_triple_raw_spo(cls.storid, self._sub_storid, parent.storid)
         self._direct_write_dirty.add(cls.storid)
+
+    def _direct_write_rdf_type(self, ind, type_cls) -> None:
+        """Write a single ``(ind, rdf:type, type_cls)`` triple straight into
+        the ontology graph, bypassing ``ind.is_a.append`` (and the per-axiom
+        owlready2 individual callback chain).
+
+        Companion to :meth:`_direct_write_subclassof` — same dirty-set +
+        end-of-parse invalidation pattern. Only safe for **named-class**
+        types; anonymous restriction targets (``hasTopping some Cheese``)
+        still need the Python construct chain.
+        """
+        if not hasattr(self, "_type_storid"):
+            self._type_storid = self.r.onto.world._abbreviate(self._RDF_TYPE)
+        self.r.onto.graph._add_obj_triple_raw_spo(
+            ind.storid, self._type_storid, type_cls.storid)
+        self._direct_write_dirty.add(ind.storid)
 
     @staticmethod
     def _is_named_class(parent) -> bool:
@@ -497,7 +514,16 @@ class FrameLoader:
     def _handle_individual(self, subject: str, sections: dict) -> None:
         ind = self.r.get_individual(subject)
         for t in sections.get("Types", []):
-            ind.is_a.append(self._parse_ce(t))
+            type_expr = self._parse_ce(t)
+            if self._is_named_class(type_expr):
+                # Same direct-write pattern as ``_handle_class``'s SubClassOf —
+                # bypasses the per-axiom owlready2 individual-type callback.
+                # Anonymous restriction targets fall through to the per-item
+                # ``is_a.append`` path which routes through owlready2's
+                # construct chain.
+                self._direct_write_rdf_type(ind, type_expr)
+            else:
+                ind.is_a.append(type_expr)
         for fact in sections.get("Facts", []):
             self._assert_fact(ind, fact)
         for same in sections.get("SameAs", []):
