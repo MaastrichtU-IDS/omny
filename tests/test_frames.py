@@ -359,6 +359,56 @@ def test_subclassof_named_and_anonymous_parents_mixed():
     )
 
 
+def test_annotation_alias_predicate_identity_preserved():
+    """The ``rdfs:label`` / ``rdfs:comment`` shorthand forms (and the bare
+    ``label`` / ``comment`` aliases) must write triples under the actual
+    rdfs IRI — not under whichever ``python_name``-aliased annotation
+    property owlready2 happens to bind to the ``.label`` / ``.comment``
+    attribute.
+
+    Regression: pre-fix ``_apply_annotations`` did
+    ``entity.label.append(value)`` for the shorthand cases, which owlready2
+    routes through ``setattr(entity, "label", …)``. If the doc had
+    *also* declared e.g. ``<http://schema.org/label>`` (same
+    ``python_name="label"``), the .label binding pointed to schema:label
+    and the value ended up under that predicate instead of rdfs:label.
+    """
+    import rdflib
+    doc = """
+    Prefix: : <http://ex.org/>
+    Prefix: rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+    Prefix: schema: <http://schema.org/>
+    AnnotationProperty: schema:comment
+    AnnotationProperty: schema:label
+    Class: A
+        Annotations: rdfs:comment "from-rdfs-c", label "from-bare-label"
+    Class: B
+        Annotations: schema:comment "from-schema-c", schema:label "from-schema-l"
+    """
+    onto = parse(doc)
+    g = onto.world.as_rdflib_graph()
+    A = rdflib.URIRef("http://ex.org/A")
+    B = rdflib.URIRef("http://ex.org/B")
+    RDFS_C = rdflib.URIRef("http://www.w3.org/2000/01/rdf-schema#comment")
+    RDFS_L = rdflib.URIRef("http://www.w3.org/2000/01/rdf-schema#label")
+    SCHEMA_C = rdflib.URIRef("http://schema.org/comment")
+    SCHEMA_L = rdflib.URIRef("http://schema.org/label")
+
+    # Each value lands under its actual predicate.
+    assert (A, RDFS_C, rdflib.Literal("from-rdfs-c")) in g, \
+        "rdfs:comment shorthand did not write under rdfs:comment IRI"
+    assert (A, RDFS_L, rdflib.Literal("from-bare-label")) in g, \
+        "bare 'label' did not write under rdfs:label IRI"
+    assert (B, SCHEMA_C, rdflib.Literal("from-schema-c")) in g
+    assert (B, SCHEMA_L, rdflib.Literal("from-schema-l")) in g
+
+    # And no cross-routing — values must not appear under the wrong predicate.
+    assert (A, SCHEMA_C, rdflib.Literal("from-rdfs-c")) not in g, \
+        "rdfs:comment value leaked into schema:comment (alias-collision bug)"
+    assert (A, SCHEMA_L, rdflib.Literal("from-bare-label")) not in g, \
+        "bare 'label' value leaked into schema:label (alias-collision bug)"
+
+
 def test_annotation_properties_with_same_local_name_do_not_collide():
     """Distinct annotation properties whose IRIs share a local name (e.g.
     ``rdfs:comment`` and ``schema.org/comment`` both alias ``entity.comment``)
