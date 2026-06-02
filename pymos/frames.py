@@ -65,7 +65,21 @@ def parse(text: str, onto: Optional[owlready2.Ontology] = None,
     prefixes.update(doc_prefixes)
 
     resolver = EntityResolver(onto, prefixes)
-    FrameLoader(resolver, ManchesterParser(resolver)).load(text)
+    loader = FrameLoader(resolver, ManchesterParser(resolver))
+    loader.load(text)
+
+    # Invalidate the Python cache for classes whose SubClassOf was
+    # direct-written (see ``_handle_class``/``_direct_write_subclassof``);
+    # the next ``world[iri]`` lookup lazy-reloads from triples and
+    # rebuilds ``is_a`` in one ``_class_is_a_changed`` fire per class
+    # instead of one per axiom. Net 1.31× on HP parse+render (status quo
+    # 135.7 s → POC 103.5 s, same-host control). See
+    # ``docs/perf-2026-06-02-pymos-bench.md``.
+    if loader._direct_write_dirty:
+        ents = onto.world._entities
+        for sid in loader._direct_write_dirty:
+            if sid in ents:
+                del ents[sid]
 
     for m in _IMPORT_RE.finditer(text):
         onto.imported_ontologies.append(onto.world.get_ontology(m.group(1)))
@@ -77,6 +91,11 @@ class FrameLoader:
     def __init__(self, resolver: EntityResolver, parser: ManchesterParser):
         self.r = resolver
         self.parser = parser
+        # Storids of classes whose SubClassOf was direct-written; ``parse()``
+        # invalidates these so future ``world[iri]`` lookups lazy-reload
+        # ``is_a`` from triples (one callback fire per class instead of one
+        # per axiom).
+        self._direct_write_dirty: set[int] = set()
 
     # ------------------------------------------------------------------
     # Public entry point
@@ -283,10 +302,53 @@ class FrameLoader:
     # Frame handlers
     # ------------------------------------------------------------------
 
+    # rdfs:subClassOf — IRI is fixed; the storid is per-world but stable
+    # across all subsequent direct-writes (look up once per loader).
+    _RDFS_SUB_CLASS_OF = "http://www.w3.org/2000/01/rdf-schema#subClassOf"
+
+    def _direct_write_subclassof(self, cls, parent) -> None:
+        """Write a single ``(cls, rdfs:subClassOf, parent)`` triple straight
+        into the ontology graph, bypassing ``is_a.append`` (and therefore
+        ``_class_is_a_changed``).
+
+        The Python cache for ``cls`` is left stale until ``parse()``
+        invalidates it at end-of-load, at which point the next
+        ``world[cls.iri]`` rebuilds ``is_a`` from triples in one
+        callback fire.
+
+        Only safe for **named-class** parents — anonymous restrictions
+        (``Restriction``, ``LogicalClassConstruct``, ``OneOf``, ``Not``)
+        have no storid and must go through ``_safe_append_is_a``.
+        """
+        if not hasattr(self, "_sub_storid"):
+            self._sub_storid = self.r.onto.world._abbreviate(self._RDFS_SUB_CLASS_OF)
+        self.r.onto.graph._add_obj_triple_raw_spo(cls.storid, self._sub_storid, parent.storid)
+        self._direct_write_dirty.add(cls.storid)
+
+    @staticmethod
+    def _is_named_class(parent) -> bool:
+        """True iff ``parent`` is a named class (has a storid) — the
+        precondition for :meth:`_direct_write_subclassof`."""
+        if not hasattr(parent, "storid"):
+            return False
+        return not isinstance(parent, (
+            owlready2.class_construct.Restriction,
+            owlready2.class_construct.LogicalClassConstruct,
+            owlready2.class_construct.OneOf,
+            owlready2.class_construct.Not,
+        ))
+
     def _handle_class(self, subject: str, sections: dict) -> None:
         cls = self.r.get_class(subject)
         for expr in sections.get("SubClassOf", []):
-            self._safe_append_is_a(cls, self._parse_ce(expr), kind="SubClassOf", subject=subject)
+            parent = self._parse_ce(expr)
+            if self._is_named_class(parent):
+                # Direct-write path: ~1.31× HP parse+render vs per-item append.
+                # Anonymous restrictions still need owlready2's Python
+                # construct chain and fall through to _safe_append_is_a.
+                self._direct_write_subclassof(cls, parent)
+            else:
+                self._safe_append_is_a(cls, parent, kind="SubClassOf", subject=subject)
         for expr in sections.get("EquivalentTo", []):
             try:
                 cls.equivalent_to.append(self._parse_ce(expr))
