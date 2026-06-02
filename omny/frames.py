@@ -385,6 +385,22 @@ class FrameLoader:
                 stacklevel=2,
             )
 
+    # bare ``label`` / ``comment`` shorthands resolve to the canonical
+    # rdfs IRI rather than to whichever ``python_name``-aliased annotation
+    # property owlready2 happens to bind to those attributes — without
+    # this, a doc that declares e.g. ``<http://schema.org/comment>``
+    # ahead of a ``Class: A`` with ``Annotations: rdfs:comment "X"``
+    # routes the value into ``schema:comment`` instead of ``rdfs:comment``
+    # because both share ``python_name="comment"``.  The fix: always
+    # write the triple under the actual predicate's IRI via
+    # ``_append_property_value``.
+    _SHORTHAND_ANNOTATION_IRIS = {
+        "rdfs:label":   "http://www.w3.org/2000/01/rdf-schema#label",
+        "label":        "http://www.w3.org/2000/01/rdf-schema#label",
+        "rdfs:comment": "http://www.w3.org/2000/01/rdf-schema#comment",
+        "comment":      "http://www.w3.org/2000/01/rdf-schema#comment",
+    }
+
     def _apply_annotations(self, entity, lines) -> None:
         """Apply annotation axioms from a list of 'prop_name "value"' strings."""
         from omny.parser import unescape_quoted_string
@@ -400,13 +416,9 @@ class FrameLoader:
                 value = unescape_quoted_string(raw[1:-1])
             else:
                 value = raw.strip('"')
-            if prop_name in ("rdfs:label", "label"):
-                entity.label.append(value)
-            elif prop_name in ("rdfs:comment", "comment"):
-                entity.comment.append(value)
-            else:
-                prop = self.r.get_annotation_property(prop_name)
-                self._append_property_value(entity, prop, value)
+            iri = self._SHORTHAND_ANNOTATION_IRIS.get(prop_name, prop_name)
+            prop = self.r.get_annotation_property(iri)
+            self._append_property_value(entity, prop, value)
 
     def _append_property_value(self, entity, prop, value) -> None:
         """Add ``value`` to ``entity`` under property ``prop``.

@@ -401,9 +401,12 @@ def test_render_annotation_aliased_python_names_no_duplicate():
     ``schema:comment "X"``. The bulk path goes triple-by-triple, so this
     can never happen.
 
-    We populate the graph directly via ``world.as_rdflib_graph()`` because
-    omny's parser also collapses python_name-aliased predicates today
-    (separate bug); this test isolates the renderer's behaviour.
+    We populate the graph directly via ``world.as_rdflib_graph()`` here
+    to isolate the renderer's behaviour. The parser's own alias-collapse
+    bug — where ``rdfs:comment`` annotation values were routed under
+    whichever python_name-aliased AP owlready2 bound to ``.comment`` —
+    is covered separately in
+    ``tests/test_frames.py::test_annotation_alias_predicate_identity_preserved``.
     """
     import rdflib
     doc = """
