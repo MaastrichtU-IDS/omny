@@ -120,7 +120,7 @@ def test_write_report_emits_markdown(tmp_path):
     results_json = tmp_path / "results.json"
     results_json.write_text(json.dumps({
         "env": {"host": "h", "platform": "p", "python": "3.12.1",
-                "pymos_sha": "abc1234", "timestamp": "2026-05-28 21:00:00",
+                "omny_sha": "abc1234", "timestamp": "2026-05-28 21:00:00",
                 "cpu_count": 8},
         "cells": [
             {"ontology": "pizza", "workload": "parse",

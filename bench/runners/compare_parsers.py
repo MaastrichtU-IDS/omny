@@ -1,4 +1,4 @@
-"""Head-to-head pymos parser-backend comparison: lark vs parsimonious.
+"""Head-to-head omny parser-backend comparison: lark vs parsimonious.
 
 Companion to ``bench/runners/snapshot.py`` for a single dimension —
 which parser backend is faster on which ontology — so future
@@ -17,7 +17,7 @@ Output:
 Notes:
 * HP parsimonious runs ~5 min on the original-host bench; the
   per-cell ``--hp-timeout`` cap (default 600 s) leaves headroom.
-* lark is the default pymos backend post-PR #45; the snapshot runner's
+* lark is the default omny backend post-PR #45; the snapshot runner's
   ``parse`` cell already measures it. This script's contribution is
   the *parsimonious counterpart* on the same workload, so the two
   numbers come from identical subprocess shapes.

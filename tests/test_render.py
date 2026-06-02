@@ -1,8 +1,8 @@
 """Tests for owlready2 -> Manchester rendering (Milestone 5)."""
 import owlready2
 
-from pymos import parse, parse_expression
-from pymos.render import render, render_expression, render_frame
+from omny import parse, parse_expression
+from omny.render import render, render_expression, render_frame
 
 
 def _rt(expr, onto, prefixes=None):
@@ -14,18 +14,18 @@ def _rt(expr, onto, prefixes=None):
 # ---- Task 19: expression renderer --------------------------------------------
 
 def test_render_named_class_full_iri(onto):
-    assert _rt("Pizza", onto) == "<http://pymos.test/onto.owl#Pizza>"
+    assert _rt("Pizza", onto) == "<http://omny.test/onto.owl#Pizza>"
 
 
 def test_render_named_class_with_prefix(onto):
-    prefixes = {"": "http://pymos.test/onto.owl#"}
+    prefixes = {"": "http://omny.test/onto.owl#"}
     assert _rt("Pizza", onto, prefixes) == ":Pizza"
 
 
 def test_render_some(onto):
     assert _rt("hasTopping some Cheese", onto) == (
-        "<http://pymos.test/onto.owl#hasTopping> some "
-        "<http://pymos.test/onto.owl#Cheese>"
+        "<http://omny.test/onto.owl#hasTopping> some "
+        "<http://omny.test/onto.owl#Cheese>"
     )
 
 
@@ -36,7 +36,7 @@ def test_render_only(onto):
 def test_render_intersection(onto):
     out = _rt("A and B", onto)
     assert " and " in out
-    assert out.count("<http://pymos.test/onto.owl#") == 2
+    assert out.count("<http://omny.test/onto.owl#") == 2
 
 
 def test_render_union(onto):
@@ -204,7 +204,7 @@ _ROUND_TRIP_DOC = """\
 Prefix: : <http://ex.org/>
 Prefix: xsd: <http://www.w3.org/2001/XMLSchema#>
 
-Ontology: <http://ex.org/pymos-rt.owl>
+Ontology: <http://ex.org/omny-rt.owl>
 
 Class: Food
 Class: Topping
@@ -244,7 +244,7 @@ def test_render_document_emits_header_and_frames():
     o = parse(_ROUND_TRIP_DOC)
     text = render(o, prefixes=_RT_PREFIXES)
     assert "Prefix: : <http://ex.org/>" in text
-    assert "Ontology: <http://ex.org/pymos-rt.owl>" in text
+    assert "Ontology: <http://ex.org/omny-rt.owl>" in text
     assert "Class: :Margherita" in text
     assert "ObjectProperty: :hasTopping" in text
     assert "DataProperty: :hasCalories" in text
@@ -402,7 +402,7 @@ def test_render_annotation_aliased_python_names_no_duplicate():
     can never happen.
 
     We populate the graph directly via ``world.as_rdflib_graph()`` because
-    pymos's parser also collapses python_name-aliased predicates today
+    omny's parser also collapses python_name-aliased predicates today
     (separate bug); this test isolates the renderer's behaviour.
     """
     import rdflib
@@ -452,7 +452,7 @@ def test_render_datatype_frame_in_document():
 
 
 def test_full_pizza_document_round_trips_structurally():
-    """The complete pizza.omn fixture covers every frame and axiom kind pymos
+    """The complete pizza.omn fixture covers every frame and axiom kind omny
     supports — round-trip must preserve class/property/individual sets and
     axiom counts after rendering with full fidelity."""
     doc = open("tests/data/pizza.omn").read()

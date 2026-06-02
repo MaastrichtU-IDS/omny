@@ -2,16 +2,16 @@ from pathlib import Path
 
 import owlready2
 
-import pymos
-from pymos import class_relations_query
-from pymos.store import run_owlready2
+import omny
+from omny import class_relations_query
+from omny.store import run_owlready2
 
 OMN = Path(__file__).resolve().parents[1] / "data" / "biomed.omn"
 NS = "http://example.org/biomed#"
 
 
 def _load():
-    return pymos.parse(OMN.read_text())
+    return omny.parse(OMN.read_text())
 
 
 def _select_iris(onto, target, relations):

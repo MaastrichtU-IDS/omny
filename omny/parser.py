@@ -7,8 +7,8 @@ from typing import Dict, Optional
 import owlready2
 from parsimonious.nodes import Node, NodeVisitor
 
-from pymos.entities import EntityResolver
-from pymos.grammar import MANCHESTER_GRAMMAR
+from omny.entities import EntityResolver
+from omny.grammar import MANCHESTER_GRAMMAR
 
 
 # Match an escape pair: ``\\\"`` or ``\\\\``. The capture is the unescaped
@@ -19,7 +19,7 @@ _UNESCAPE_RE = re.compile(r'\\(["\\])')
 
 
 def unescape_quoted_string(raw: str) -> str:
-    """Reverse ``pymos._render_expression._escape_str``.
+    """Reverse ``omny._render_expression._escape_str``.
 
     The Manchester ``quoted_string`` grammar allows ``\\\\`` (escaped backslash)
     and ``\\"`` (escaped quote) inside a literal. This helper turns them back
@@ -209,7 +209,7 @@ class ManchesterParser(NodeVisitor):
 
     def visit_quoted_string(self, node, children):
         # Strip the surrounding quotes and unescape ``\\"`` / ``\\\\`` so the
-        # round-trip with ``_escape_str`` in pymos._render_expression is
+        # round-trip with ``_escape_str`` in omny._render_expression is
         # lossless. See ``unescape_quoted_string`` below.
         return unescape_quoted_string(node.text[1:-1])
 

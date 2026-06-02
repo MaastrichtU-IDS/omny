@@ -1,7 +1,7 @@
 """Build store-agnostic SPARQL for class-relation retrieval (asserted graph only)."""
 from typing import Iterable
 
-from pymos.vocab import STRUCTURAL_PATH, prefix_header
+from omny.vocab import STRUCTURAL_PATH, prefix_header
 
 RELATIONS = ("super", "sub", "direct_super", "direct_sub", "equiv", "individual")
 
@@ -41,12 +41,12 @@ def _target_term(target) -> tuple[str, str]:
     - A SPARQL variable ``"?cls"`` -> returned as-is.
     - An owlready2 named entity (anything with ``.iri``) -> ``<entity.iri>``.
     - An owlready2 anonymous construct (``Restriction``, ``And``, ``Or``,
-      ``Not``, ``OneOf``) -> walked via :func:`pymos.pattern.expression_to_pattern`
+      ``Not``, ``OneOf``) -> walked via :func:`omny.pattern.expression_to_pattern`
       to produce a fresh variable and a structural pattern.
     - A prefixed name like ``"ex:Pizza"`` -> passed through (the prefix must be
       declared in the query header).
     """
-    from pymos.pattern import expression_to_pattern  # local import; avoids cycle
+    from omny.pattern import expression_to_pattern  # local import; avoids cycle
     import owlready2
 
     if hasattr(target, "iri"):
@@ -98,7 +98,7 @@ def class_relations_query(target, relations: Iterable[str] = ("super", "sub", "e
 
         construct: If ``True`` (default) emit a SPARQL CONSTRUCT query returning the
             full outgoing blank-node subgraph of every related class (structural
-            predicates only — see :data:`pymos.vocab.STRUCTURAL_PATH`).  This is
+            predicates only — see :data:`omny.vocab.STRUCTURAL_PATH`).  This is
             useful to materialise anonymous class-expression nodes attached to the
             related classes.  If ``False``, emit a SELECT query returning just the
             related IRIs (``?rel`` / ``?ind``).

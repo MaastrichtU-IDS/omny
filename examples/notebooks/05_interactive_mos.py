@@ -13,7 +13,7 @@
 # Tab inside a `%%mos` cell completes keywords, class names, properties, and individuals.
 
 # %%
-%load_ext pymos.jupyter
+%load_ext omny.jupyter
 
 # %% [markdown]
 # ## Build a small pizza ontology

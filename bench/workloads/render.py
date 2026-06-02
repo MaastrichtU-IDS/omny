@@ -1,20 +1,20 @@
-"""Render workload: pymos.render() round-trip + idempotency check."""
+"""Render workload: omny.render() round-trip + idempotency check."""
 from pathlib import Path
 
-import pymos
+import omny
 
 from bench.measure import Measurement, measure_in_subprocess
 
 
 def _do_render(path: str) -> None:
-    onto = pymos.parse(Path(path).read_text())
-    pymos.render(onto)
+    onto = omny.parse(Path(path).read_text())
+    omny.render(onto)
 
 
 def _check_idempotent(path: str) -> tuple[bool, int]:
     text = Path(path).read_text()
-    rendered1 = pymos.render(pymos.parse(text))
-    rendered2 = pymos.render(pymos.parse(rendered1))
+    rendered1 = omny.render(omny.parse(text))
+    rendered2 = omny.render(omny.parse(rendered1))
     return (rendered1 == rendered2, len(rendered1.encode()))
 
 

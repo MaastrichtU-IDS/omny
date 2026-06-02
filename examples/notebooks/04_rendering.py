@@ -1,25 +1,25 @@
 # %% [markdown]
 # # 04 — Rendering owlready2 ontologies back to Manchester syntax
 #
-# `pymos` is symmetric: the same package that **parses** a Manchester `.omn`
+# `omny` is symmetric: the same package that **parses** a Manchester `.omn`
 # document into owlready2 will also **render** an owlready2 ontology back to a
 # Manchester document — full round-trip, pure Python, no Java.
 #
 # This notebook covers the three public rendering entry points:
 #
-# 1. `pymos.render_expression(ce, prefixes)` — one class expression to a string,
+# 1. `omny.render_expression(ce, prefixes)` — one class expression to a string,
 #    precedence-aware (parentheses are inserted around lower-precedence operands).
-# 2. `pymos.render_frame(entity, prefixes)` — one Class / ObjectProperty /
+# 2. `omny.render_frame(entity, prefixes)` — one Class / ObjectProperty /
 #    DataProperty / Individual / AnnotationProperty frame.
-# 3. `pymos.render(onto, prefixes)` — a full document with Prefix declarations,
+# 3. `omny.render(onto, prefixes)` — a full document with Prefix declarations,
 #    Ontology header, and frames in stable order.
 
 # %%
 from pathlib import Path
 
-import pymos
+import omny
 
-print("pymos version:", pymos.__version__)
+print("omny version:", omny.__version__)
 
 # %% [markdown]
 # ## A. Render a single class expression
@@ -45,18 +45,18 @@ with onto:
 PFX = {"": "http://example.org/biomed#"}
 
 # A simple existential restriction
-ce1 = pymos.parse_expression("treats some BacterialInfection", onto, prefixes=PFX)
-print(pymos.render_expression(ce1, prefixes=PFX))
+ce1 = omny.parse_expression("treats some BacterialInfection", onto, prefixes=PFX)
+print(omny.render_expression(ce1, prefixes=PFX))
 
 # Boolean nesting — note the parentheses around the `or`
-ce2 = pymos.parse_expression(
+ce2 = omny.parse_expression(
     "treats some (BacterialInfection or ViralInfection)", onto, prefixes=PFX
 )
-print(pymos.render_expression(ce2, prefixes=PFX))
+print(omny.render_expression(ce2, prefixes=PFX))
 
 # Cardinality
-ce3 = pymos.parse_expression("treats min 2 Disease", onto, prefixes=PFX)
-print(pymos.render_expression(ce3, prefixes=PFX))
+ce3 = omny.parse_expression("treats min 2 Disease", onto, prefixes=PFX)
+print(omny.render_expression(ce3, prefixes=PFX))
 
 # %% [markdown]
 # ## B. Render a single frame
@@ -90,23 +90,23 @@ PFX2 = {
     "rdfs": "http://www.w3.org/2000/01/rdf-schema#",
 }
 
-onto2 = pymos.parse(doc)
+onto2 = omny.parse(doc)
 
 antibiotic = onto2.world["http://example.org/biomed#Antibiotic"]
-print(pymos.render_frame(antibiotic, prefixes=PFX2))
+print(omny.render_frame(antibiotic, prefixes=PFX2))
 
 # %%
 treats = onto2.world["http://example.org/biomed#treats"]
-print(pymos.render_frame(treats, prefixes=PFX2))
+print(omny.render_frame(treats, prefixes=PFX2))
 
 # %%
 penicillin = onto2.world["http://example.org/biomed#penicillin"]
-print(pymos.render_frame(penicillin, prefixes=PFX2))
+print(omny.render_frame(penicillin, prefixes=PFX2))
 
 # %% [markdown]
 # ## C. Render a full document
 #
-# `pymos.render(onto, prefixes)` assembles the full Manchester document:
+# `omny.render(onto, prefixes)` assembles the full Manchester document:
 # Prefix declarations, Ontology header, then frames in stable order
 # (Datatype → AnnotationProperty → ObjectProperty → DataProperty → Class →
 # Individual, each sorted by IRI). The output is deterministic — running
@@ -118,9 +118,9 @@ print(pymos.render_frame(penicillin, prefixes=PFX2))
 # %%
 OMN = Path("..") / "data" / "biomed.omn"
 biomed_doc = OMN.read_text()
-biomed_onto = pymos.parse(biomed_doc)
+biomed_onto = omny.parse(biomed_doc)
 
-rendered = pymos.render(biomed_onto, prefixes=PFX2)
+rendered = omny.render(biomed_onto, prefixes=PFX2)
 print(rendered)
 
 # %% [markdown]
@@ -134,17 +134,17 @@ print(rendered)
 #
 # (The first pass is *not* guaranteed byte-identical to the source — the
 # source may have differing whitespace, frame ordering, or use prefixes that
-# pymos doesn't have in its map. The second pass stabilises.)
+# omny doesn't have in its map. The second pass stabilises.)
 
 # %%
-text1 = pymos.render(pymos.parse(biomed_doc), prefixes=PFX2)
-text2 = pymos.render(pymos.parse(text1), prefixes=PFX2)
+text1 = omny.render(omny.parse(biomed_doc), prefixes=PFX2)
+text2 = omny.render(omny.parse(text1), prefixes=PFX2)
 
 print("byte-identical second pass?", text1 == text2)
 
 # %%
-onto_a = pymos.parse(biomed_doc)
-onto_b = pymos.parse(text1)
+onto_a = omny.parse(biomed_doc)
+onto_b = omny.parse(text1)
 
 iris_a = {c.iri for c in onto_a.classes()}
 iris_b = {c.iri for c in onto_b.classes()}
@@ -155,7 +155,7 @@ print("number of classes:", len(iris_a))
 # %% [markdown]
 # ## E. What `render` covers
 #
-# As of this notebook, `pymos.render` emits:
+# As of this notebook, `omny.render` emits:
 #
 # - **Header**: `Prefix:` declarations (from the prefix map you pass) and
 #   `Ontology:` IRI; `Import:` directives if any are present.
@@ -177,6 +177,6 @@ print("number of classes:", len(iris_a))
 # %% [markdown]
 # ## Takeaway
 #
-# `pymos.render` closes the loop: parse a `.omn` file, manipulate the
+# `omny.render` closes the loop: parse a `.omn` file, manipulate the
 # ontology programmatically through owlready2, then re-emit a clean,
 # deterministic Manchester document — all without leaving Python.

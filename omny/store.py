@@ -1,5 +1,5 @@
 """Run a generated SPARQL query against various backends. Each runner imports its
-backend lazily so pymos has no hard dependency on any of them."""
+backend lazily so omny has no hard dependency on any of them."""
 import re
 
 _CONSTRUCT_RE = re.compile(r"\bCONSTRUCT\b", re.IGNORECASE)

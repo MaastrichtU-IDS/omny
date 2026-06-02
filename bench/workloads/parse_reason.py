@@ -1,4 +1,4 @@
-"""Parse-then-reason workload: pymos.parse() followed by a reasoner's
+"""Parse-then-reason workload: omny.parse() followed by a reasoner's
 ``materialise()`` step. Reports a single combined wall time per cell, so
 the snapshot table can answer "what is the cost of parse + inference?"
 alongside "what is the cost of parse alone?".
@@ -12,7 +12,7 @@ are wanted in this slot.
 """
 from pathlib import Path
 
-import pymos
+import omny
 
 from bench.measure import Measurement, measure_in_subprocess
 from bench.reasoners.owlrl import OwlrlReasoner
@@ -20,7 +20,7 @@ from bench.reasoners.owlrl import OwlrlReasoner
 
 def _do_parse_then_reason(path: str) -> None:
     """Side-effect target: parse the ontology and run the OWL 2 RL closure."""
-    onto = pymos.parse(Path(path).read_text())
+    onto = omny.parse(Path(path).read_text())
     OwlrlReasoner().materialise(Path(path))
     # `materialise` re-parses internally (it accepts a path, not an ontology),
     # so this is "parse + reason from scratch" — the realistic cost of taking
@@ -32,7 +32,7 @@ def _do_parse_then_reason(path: str) -> None:
 def bench_parse_then_reason(
     path: str, *, hot_iters: int = 1, warmup: int = 0,
 ) -> Measurement:
-    """Measure ``pymos.parse(path) + owlrl.materialise(path)`` in a subprocess.
+    """Measure ``omny.parse(path) + owlrl.materialise(path)`` in a subprocess.
 
     Defaults to ``hot_iters=1, warmup=0`` because the owlrl closure on
     real ontologies is dominated by a single expensive iteration; warmup

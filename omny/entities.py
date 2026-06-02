@@ -17,7 +17,7 @@ class EntityResolver:
         self.onto = onto
         self.world = onto.world
         self.prefixes = dict(prefixes or {})
-        self.base = onto.base_iri  # e.g. "http://pymos.test/onto.owl#"
+        self.base = onto.base_iri  # e.g. "http://omny.test/onto.owl#"
 
     def expand(self, name: str) -> str:
         """Return the full IRI for a Manchester name."""

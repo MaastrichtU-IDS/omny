@@ -1,11 +1,11 @@
 import owlready2
-from pymos.parser import parse_expression
+from omny.parser import parse_expression
 
 
 def test_named_class(onto):
     ce = parse_expression("Pizza", onto)
     assert isinstance(ce, owlready2.ThingClass)
-    assert ce.iri == "http://pymos.test/onto.owl#Pizza"
+    assert ce.iri == "http://omny.test/onto.owl#Pizza"
 
 
 def test_full_iri_class(onto):

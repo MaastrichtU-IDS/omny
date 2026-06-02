@@ -1,11 +1,11 @@
 """Tab-completion for MOS cells.
 
 Pure (mostly) text-classification of the active line/cell + a state-aware
-candidate pool. ``pymos.jupyter`` imports ``_mos_complete`` from here and
-registers it with IPython; tests likewise import via ``pymos.jupyter``.
+candidate pool. ``omny.jupyter`` imports ``_mos_complete`` from here and
+registers it with IPython; tests likewise import via ``omny.jupyter``.
 
 The one state touch — listing classes/properties/individuals from the active
-ontology — uses a lazy import of ``pymos.jupyter._state`` to avoid a circular
+ontology — uses a lazy import of ``omny.jupyter._state`` to avoid a circular
 import at module load time.
 """
 import re
@@ -61,9 +61,9 @@ def _is_mos_cell(cell_text: str) -> bool:
 
 def _candidate_pool(context: str) -> list[str]:
     """Return raw candidates appropriate for the given context label."""
-    # Lazy import: the state lives in ``pymos.jupyter`` (where the magics own
+    # Lazy import: the state lives in ``omny.jupyter`` (where the magics own
     # the active ontology/world). Importing at module top would be circular.
-    from pymos.jupyter import _state
+    from omny.jupyter import _state
 
     if context == "line_start":
         return list(_FRAME_KEYWORDS)

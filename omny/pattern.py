@@ -2,7 +2,7 @@
 
 The walker emits triple patterns that bind a fresh variable (``?t0``) to any blank
 node whose outgoing structure matches the input construct. Used by
-:func:`pymos.sparql.class_relations_query` when the target is an anonymous
+:func:`omny.sparql.class_relations_query` when the target is an anonymous
 expression rather than a named IRI.
 """
 import owlready2

@@ -5,7 +5,7 @@ from pathlib import Path
 import owlrl
 import rdflib
 
-import pymos
+import omny
 
 
 class OwlrlReasoner:
@@ -14,7 +14,7 @@ class OwlrlReasoner:
     wrapper = "in-process"
 
     def materialise(self, source: Path) -> Path:
-        onto = pymos.parse(source.read_text())
+        onto = omny.parse(source.read_text())
         buf = io.BytesIO()
         onto.save(file=buf, format="ntriples")
         g = rdflib.Graph()

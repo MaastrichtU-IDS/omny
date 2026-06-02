@@ -1,6 +1,6 @@
 """Lark-based Manchester class-expression parser (LALR).
 
-A drop-in replacement for ``pymos.parser.parse_expression`` that
+A drop-in replacement for ``omny.parser.parse_expression`` that
 trades parsimonious's PEG packrat for lark's LALR grammar. The
 microbench at ``bench/experiments/lark_microbench.py`` measured
 ~5.4× faster per-parse on a complex expression — the production
@@ -9,7 +9,7 @@ parsimonious occupies (cProfile said ~48 %).
 
 Design notes
 ============
-The parsimonious grammar in ``pymos/grammar.py`` uses ordered choice
+The parsimonious grammar in ``omny/grammar.py`` uses ordered choice
 to disambiguate object-property restrictions vs data-property
 restrictions at the operand position (it tries ``data_some_only_res``
 first, then ``some_only_res``).  LALR can't backtrack across those
@@ -41,7 +41,7 @@ from typing import Dict, Optional
 import owlready2
 from lark import Lark, Transformer, v_args
 
-from pymos.entities import EntityResolver
+from omny.entities import EntityResolver
 
 
 # Module-level: build the LALR table ONCE at import time. Per-call
@@ -151,7 +151,7 @@ _FACET = {
 
 # datatype IRI suffix -> Python type for typed_literal coercion. owlready2
 # stores Manchester data ranges as Python type objects, so a bare ``xsd:integer``
-# becomes ``int`` etc. Mirrors the dict in ``pymos.parser.ManchesterParser._XSD``.
+# becomes ``int`` etc. Mirrors the dict in ``omny.parser.ManchesterParser._XSD``.
 _XSD = {
     "integer": int, "int": int, "double": float, "float": float,
     "decimal": float, "string": str, "boolean": bool,
@@ -351,7 +351,7 @@ class _Transformer(Transformer):
     def lang_lit(self, qs, lang):
         # parsimonious renders these as bare strings (the lang tag is
         # preserved in the .lang attribute on the locstr instance,
-        # but pymos.parser's visit_quoted_string returns a plain str).
+        # but omny.parser's visit_quoted_string returns a plain str).
         # Match that: ignore the lang tag and return the unescaped text.
         # (Annotation-side language handling happens in frames.py.)
         return _unescape_quoted(qs.value)
@@ -397,7 +397,7 @@ class _Transformer(Transformer):
 
 
 class LarkManchesterParser:
-    """Drop-in replacement for :class:`pymos.parser.ManchesterParser`.
+    """Drop-in replacement for :class:`omny.parser.ManchesterParser`.
 
     ``FrameLoader`` holds one of these and calls ``parse_expression``
     per axiom operand; sharing the resolver across calls keeps prefix
@@ -421,7 +421,7 @@ def parse_expression_lark(text: str, onto: owlready2.Ontology,
                           prefixes: Optional[Dict[str, str]] = None):
     """Parse a Manchester class expression with the lark backend.
 
-    Public API parity with :func:`pymos.parser.parse_expression`.
+    Public API parity with :func:`omny.parser.parse_expression`.
     Same arguments, same return shape (an owlready2 construct).
     """
     return LarkManchesterParser(EntityResolver(onto, prefixes)).parse_expression(text)

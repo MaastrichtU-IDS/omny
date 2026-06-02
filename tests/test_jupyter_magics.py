@@ -1,4 +1,4 @@
-"""In-process tests for pymos.jupyter magics.
+"""In-process tests for omny.jupyter magics.
 
 Uses IPython.testing.globalipapp to obtain a real (singleton) InteractiveShell,
 loads the extension, and exercises each magic. No notebook server is needed.
@@ -14,7 +14,7 @@ _HAS_JAVA = shutil.which("java") is not None
 
 
 def _ip():
-    """Fresh-ish IPython shell with the extension loaded; resets pymos state.
+    """Fresh-ish IPython shell with the extension loaded; resets omny state.
 
     ``globalipapp.get_ipython()`` is a one-shot installer: it returns the
     singleton on the first call only. Subsequent calls return ``None`` and the
@@ -22,10 +22,10 @@ def _ip():
     installer registered globally during its first invocation.
     """
     ip = _bootstrap_ipython() or IPython.get_ipython()
-    if "pymos.jupyter" in ip.extension_manager.loaded:
-        ip.extension_manager.reload_extension("pymos.jupyter")
+    if "omny.jupyter" in ip.extension_manager.loaded:
+        ip.extension_manager.reload_extension("omny.jupyter")
     else:
-        ip.extension_manager.load_extension("pymos.jupyter")
+        ip.extension_manager.load_extension("omny.jupyter")
     # The extension exposes a reset hook via the user_ns "mos_reset" callable.
     ip.user_ns["mos_reset"]()
     return ip
@@ -63,8 +63,8 @@ def test_reason_materializes_inferred_subclass():
     ))
     ip.run_line_magic("reason", "")
     onto = ip.user_ns["mos_onto"]
-    pizza = onto.world["http://pymos.test/notebook#Pizza"]
-    margherita = onto.world["http://pymos.test/notebook#Margherita"]
+    pizza = onto.world["http://omny.test/notebook#Pizza"]
+    margherita = onto.world["http://omny.test/notebook#Margherita"]
     # After reasoning, Margherita's transitive parents include Pizza.
     parents = set(margherita.ancestors())
     assert pizza in parents, (
@@ -83,7 +83,7 @@ def test_mos_query_equiv_finds_named_class(capsys):
     ))
     ip.run_cell_magic("mos_query", "equiv", "Pizza and (hasTopping some Cheese)")
     out = capsys.readouterr().out
-    assert "http://pymos.test/notebook#Margherita" in out
+    assert "http://omny.test/notebook#Margherita" in out
 
 
 def test_mos_show_renders_one_class(capsys):
@@ -122,8 +122,8 @@ def test_mos_save_writes_file(tmp_path):
     text = target.read_text()
     assert "Class:" in text
     # Round-trip: parsing the saved file recovers the classes.
-    import pymos
-    onto2 = pymos.parse(text)
+    import omny
+    onto2 = omny.parse(text)
     names = {c.name for c in onto2.classes()}
     assert {"Pizza", "Cheese"} <= names
 
@@ -133,7 +133,7 @@ def test_completer_offers_frame_keywords_at_line_start():
     ip.run_cell_magic("mos", "", "Class: Pizza")
     # The completer is exported as `_mos_complete(cell_text, line, cursor_col)`
     # for testability — IPython invokes it through set_custom_completer.
-    from pymos.jupyter import _mos_complete
+    from omny.jupyter import _mos_complete
     cands = _mos_complete(cell_text="%%mos\nC", line="C", cursor_col=1)
     assert "Class:" in cands
 
@@ -141,7 +141,7 @@ def test_completer_offers_frame_keywords_at_line_start():
 def test_completer_offers_known_class_after_subclassof():
     ip = _ip()
     ip.run_cell_magic("mos", "", "Class: Pizza\nClass: Cheese")
-    from pymos.jupyter import _mos_complete
+    from omny.jupyter import _mos_complete
     cell = "%%mos\nClass: Margherita\n    SubClassOf: P"
     line = "    SubClassOf: P"
     cands = _mos_complete(cell_text=cell, line=line, cursor_col=len(line))
@@ -152,7 +152,7 @@ def test_completer_offers_restriction_operators_after_property():
     ip = _ip()
     ip.run_cell_magic("mos", "",
                      "ObjectProperty: hasTopping\nClass: Pizza\nClass: Cheese")
-    from pymos.jupyter import _mos_complete
+    from omny.jupyter import _mos_complete
     cell = "%%mos_query equiv\nPizza and (hasTopping s"
     line = "Pizza and (hasTopping s"
     cands = _mos_complete(cell_text=cell, line=line, cursor_col=len(line))
@@ -161,7 +161,7 @@ def test_completer_offers_restriction_operators_after_property():
 
 def test_completer_returns_none_outside_mos_cells():
     _ip()  # load extension + reset state (return value unused)
-    from pymos.jupyter import _mos_complete
+    from omny.jupyter import _mos_complete
     # No %%mos magic on the first line → completer should yield None
     # so the default Python completer runs instead.
     cands = _mos_complete(cell_text="x = 1\nCl", line="Cl", cursor_col=2)
@@ -190,7 +190,7 @@ def test_mos_query_unknown_relation_lists_valid(capsys):
 def test_register_completer_adapter_forwards_to_mos_complete():
     """Verify the IPython adapter glue translates event objects correctly."""
     from types import SimpleNamespace
-    from pymos.jupyter import _register_completer
+    from omny.jupyter import _register_completer
     # Reset state then add a class so dynamic candidates are non-empty.
     ip = _ip()
     ip.run_cell_magic("mos", "", "Class: Pizza")
@@ -223,8 +223,8 @@ def test_load_extension_emits_codemirror_js(capsys):
     highlighting is silently lost. Behavioral check happens in the docker smoke test.
     """
     ip = _bootstrap_ipython() or IPython.get_ipython()
-    if "pymos.jupyter" in ip.extension_manager.loaded:
-        ip.extension_manager.unload_extension("pymos.jupyter")
+    if "omny.jupyter" in ip.extension_manager.loaded:
+        ip.extension_manager.unload_extension("omny.jupyter")
     captured = []
     orig_publish = ip.display_pub.publish
 
@@ -234,7 +234,7 @@ def test_load_extension_emits_codemirror_js(capsys):
 
     ip.display_pub.publish = _spy
     try:
-        ip.extension_manager.load_extension("pymos.jupyter")
+        ip.extension_manager.load_extension("omny.jupyter")
     finally:
         ip.display_pub.publish = orig_publish
     js_blobs = [

@@ -3,14 +3,34 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "pymos"
+name = "omny"
 version = "0.1.0"
-description = "Pure-Python Manchester OWL syntax parser to the owlready2 model, with a class-relation SPARQL CONSTRUCT converter."
+description = "Pure-Python Manchester OWL Syntax parser and renderer for owlready2, with a class-relation SPARQL query builder. No Java required."
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }
 authors = [{ name = "Michel Dumontier", email = "michel.dumontier@maastrichtuniversity.nl" }]
+keywords = ["owl", "ontology", "manchester", "owl-syntax", "owlready2", "sparql", "rdf", "semantic-web"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Information Analysis",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Topic :: Text Processing :: Markup",
+]
 dependencies = ["lark>=1.0", "parsimonious>=0.10", "owlready2>=0.46"]
+
+[project.urls]
+Homepage = "https://github.com/MaastrichtU-IDS/omny"
+Repository = "https://github.com/MaastrichtU-IDS/omny"
+Issues = "https://github.com/MaastrichtU-IDS/omny/issues"
 
 [project.optional-dependencies]
 pyoxigraph = ["pyoxigraph>=0.4"]
@@ -29,10 +49,10 @@ bench = [
 ]
 
 [tool.setuptools.packages.find]
-include = ["pymos*"]
+include = ["omny*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 
 [tool.ruff]
-extend-exclude = ["pymos/grammar.py"]
+extend-exclude = ["omny/grammar.py"]

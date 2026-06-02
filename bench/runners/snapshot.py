@@ -12,7 +12,7 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Iterable
 
-import pymos
+import omny
 
 from bench.corpus import CORPUS, CorpusEntry
 from bench.download import cached_omn_path, download_one
@@ -43,7 +43,7 @@ def _env_header() -> dict:
         "host": socket.gethostname(),
         "platform": platform.platform(),
         "python": sys.version.split()[0],
-        "pymos_sha": _git_sha(),
+        "omny_sha": _git_sha(),
         "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
         "cpu_count": os.cpu_count(),
     }
@@ -160,7 +160,7 @@ def run_snapshot(
             _add(_err_cell("parse_reason", exc, reasoner="owlrl"))
 
         # OWLAPI parse via ROBOT-docker — a head-to-head reference for
-        # pymos.parse. Wall includes JVM + docker startup (~4 s floor);
+        # omny.parse. Wall includes JVM + docker startup (~4 s floor);
         # subtract ``floors["robot-docker"]`` for a JVM-pure number.
         # Skipped if docker isn't available.
         try:
@@ -174,12 +174,12 @@ def run_snapshot(
         except Exception as exc:
             _add(_err_cell("parse_owlapi", exc))
 
-        # Target picking — needed for the query loop. If pymos.parse() or
+        # Target picking — needed for the query loop. If omny.parse() or
         # pick_targets() raise (e.g. ontology has zero classes), record the
         # failure once and skip the query matrix for this ontology rather
         # than emit N empty rows.
         try:
-            onto = pymos.parse(omn.read_text())
+            onto = omny.parse(omn.read_text())
             targets = pick_targets(onto, k=targets_per_ontology)
         except Exception as exc:
             _add(_err_cell("target_pick", exc))
@@ -271,7 +271,7 @@ def _flush_results(out_dir: Path, env: dict, cells: list) -> None:
 
 def _cli():
     import argparse, datetime as dt
-    p = argparse.ArgumentParser(description="pymos perf snapshot runner")
+    p = argparse.ArgumentParser(description="omny perf snapshot runner")
     p.add_argument("--tier", default="tiny",
                    help="comma-separated tiers (tiny,small,medium,large,huge) or 'all'")
     p.add_argument("--backends", default="pyoxigraph_mem,owlready2_mem",
@@ -285,7 +285,7 @@ def _cli():
     p.add_argument("--out", type=Path,
                    default=Path(f"bench/results/{dt.date.today().isoformat()}-run"))
     p.add_argument("--report-md", type=Path,
-                   default=Path(f"docs/perf-{dt.date.today().isoformat()}-pymos-bench.md"))
+                   default=Path(f"docs/perf-{dt.date.today().isoformat()}-omny-bench.md"))
     args = p.parse_args()
 
     if args.tier == "all":

@@ -1,13 +1,13 @@
 """Smoke/regression tests: re-parse Manchester corpus strings from owlapy's test suite.
 
-Each expression is parsed with pymos and asserted to return a non-None owlready2 object
+Each expression is parsed with omny and asserted to return a non-None owlready2 object
 without raising. Structural match to owlapy's model is NOT checked here.
 
-DL-syntax strings (using ∃, ⊓, ⊔, ≥, ≤, =, ¬, ⊤, ⊥) are excluded as pymos
+DL-syntax strings (using ∃, ⊓, ⊔, ≥, ≤, =, ¬, ⊤, ⊥) are excluded as omny
 targets Manchester syntax only.
 """
 import pytest
-from pymos.parser import parse_expression
+from omny.parser import parse_expression
 
 # Namespace matching the corpus strings (mutagenesis)
 NS = "http://dl-learner.org/mutagenesis#"

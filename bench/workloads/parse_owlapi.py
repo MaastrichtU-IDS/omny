@@ -16,7 +16,7 @@ step we can't skip. So:
   * The startup cost is reported separately by
     ``bench.reasoners.floors.measure_wrapper_floors(include_docker=True)``
     under ``"robot-docker"`` — subtract it from this number to estimate
-    OWLAPI's pure-parse time, or just report both alongside the pymos
+    OWLAPI's pure-parse time, or just report both alongside the omny
     numbers so the comparison is honest about what's included.
 
 We measure ``robot convert --input X --output X.tmp.owx`` because:

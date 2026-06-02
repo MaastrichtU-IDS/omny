@@ -21,10 +21,10 @@ def test_owlrl_reasoner_adds_inferred_triples(pizza_text, tmp_path):
     out = r.materialise(p)
     assert out != p
     g_in = rdflib.Graph()
-    import pymos
+    import omny
     import io
     buf = io.BytesIO()
-    pymos.parse(pizza_text).save(file=buf, format="ntriples")
+    omny.parse(pizza_text).save(file=buf, format="ntriples")
     g_in.parse(data=buf.getvalue(), format="nt")
 
     g_out = rdflib.Graph()

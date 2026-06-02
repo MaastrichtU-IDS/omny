@@ -4,7 +4,7 @@ from typing import Dict, List, Optional, Tuple
 
 import owlready2
 
-from pymos._frame_tokeniser import (
+from omny._frame_tokeniser import (
     _ALL_KNOWN_KEYWORDS,
     _AXIOM_KEYWORDS,
     _build_string_mask,
@@ -16,8 +16,8 @@ from pymos._frame_tokeniser import (
     _ONTOLOGY_RE,
     _PREFIX_RE,
 )
-from pymos.entities import EntityResolver
-from pymos._lark_parser import LarkManchesterParser as ManchesterParser
+from omny.entities import EntityResolver
+from omny._lark_parser import LarkManchesterParser as ManchesterParser
 
 
 def parse(text: str, onto: Optional[owlready2.Ontology] = None,
@@ -34,7 +34,7 @@ def parse(text: str, onto: Optional[owlready2.Ontology] = None,
         text: A complete Manchester OWL document as a string.
         onto: An existing owlready2 ``Ontology`` to populate.  If ``None``, a
             fresh ``World`` and ``Ontology`` with a default IRI
-            (``http://pymos.test/onto.owl``) are created and returned.
+            (``http://omny.test/onto.owl``) are created and returned.
         prefixes: Optional mapping of prefix label to base IRI that supplements
             any ``Prefix:`` declarations found in the document.
 
@@ -58,7 +58,7 @@ def parse(text: str, onto: Optional[owlready2.Ontology] = None,
 
     if onto is None:
         m = _ONTOLOGY_RE.search(text)
-        iri = m.group(1) if m else "http://pymos.test/onto.owl"
+        iri = m.group(1) if m else "http://omny.test/onto.owl"
         onto = owlready2.World().get_ontology(iri)
 
     prefixes = dict(prefixes or {})
@@ -74,7 +74,7 @@ def parse(text: str, onto: Optional[owlready2.Ontology] = None,
     # rebuilds ``is_a`` in one ``_class_is_a_changed`` fire per class
     # instead of one per axiom. Net 1.31× on HP parse+render (status quo
     # 135.7 s → POC 103.5 s, same-host control). See
-    # ``docs/perf-2026-06-02-pymos-bench.md``.
+    # ``docs/perf-2026-06-02-omny-bench.md``.
     if loader._direct_write_dirty:
         ents = onto.world._entities
         for sid in loader._direct_write_dirty:
@@ -256,7 +256,7 @@ class FrameLoader:
         Reuses the C-level :func:`_build_string_mask` from PR #41 (no per-char
         string-escape state to track) and avoids the ``buf += ch`` accumulator
         that dominated the old loop on HP (138 k calls / 25 s = 13 % of the
-        post-lark parse wall; see ``docs/perf-2026-06-02-pymos-bench.md``).
+        post-lark parse wall; see ``docs/perf-2026-06-02-omny-bench.md``).
         We walk the input once tracking bracket depth and recording top-level
         comma positions, then slice the segments out in one batch.
         """
@@ -387,7 +387,7 @@ class FrameLoader:
 
     def _apply_annotations(self, entity, lines) -> None:
         """Apply annotation axioms from a list of 'prop_name "value"' strings."""
-        from pymos.parser import unescape_quoted_string
+        from omny.parser import unescape_quoted_string
         for line in lines:
             prop_name, _, val = line.strip().partition(" ")
             raw = val.strip()
