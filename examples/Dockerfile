@@ -11,15 +11,21 @@ RUN pip install --no-cache-dir jupyterlab==4.* jupytext==1.* requests
 
 WORKDIR /workspace
 
-# pymos is installed editable at container start (see compose command), because
-# the repo is bind-mounted. We pre-install the heavy extras here so startup is fast.
+# omny is installed editable at container start (see compose command), because
+# the repo is bind-mounted. Pre-install every dep + every optional extra used
+# by the notebooks so startup is fast and notebook 06 (HermiT + owlrl) and
+# notebook 05 (Jupyter magics) work out of the box:
+#   - lark + parsimonious + owlready2 + rdflib  : core omny deps
+#   - pyoxigraph + SPARQLWrapper                : notebook 02/03 backends
+#   - owlrl                                     : notebook 06 OWL 2 RL closure
 RUN pip install --no-cache-dir \
-    "parsimonious>=0.10" "owlready2>=0.46" \
-    "rdflib>=7.0" "pyoxigraph>=0.4" "SPARQLWrapper>=2.0"
+    "lark>=1.0" "parsimonious>=0.10" "owlready2>=0.46" \
+    "rdflib>=7.0" "pyoxigraph>=0.4" "SPARQLWrapper>=2.0" \
+    "owlrl>=6.0"
 
 EXPOSE 8888
 
-# Install pymos editable, then launch JupyterLab with no token (demo only).
+# Install omny editable, then launch JupyterLab with no token (demo only).
 # NOTE: do NOT run `jupytext --sync` here — the .ipynb files are committed WITH
 # executed outputs (a later task), and a startup sync from the output-less .py would
 # blank them. The jupytext.toml pairing handles sync when editing inside Jupyter.
