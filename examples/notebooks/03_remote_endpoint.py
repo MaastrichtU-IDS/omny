@@ -14,7 +14,8 @@ from pathlib import Path
 import omny
 from omny import class_relations_query
 
-onto = omny.parse(Path("/workspace/examples/data/biomed.omn").read_text())
+_BIOMED = Path(__file__).resolve().parents[1] / "data" / "biomed.omn"
+onto = omny.parse(_BIOMED.read_text())
 NS = "http://example.org/biomed#"
 
 # %% [markdown]

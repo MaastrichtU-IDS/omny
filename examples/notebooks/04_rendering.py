@@ -116,7 +116,8 @@ print(omny.render_frame(penicillin, prefixes=PFX2))
 # render the resulting owlready2 ontology back to Manchester.
 
 # %%
-OMN = Path("..") / "data" / "biomed.omn"
+# Resolve relative to this file so the script runs from any cwd.
+OMN = Path(__file__).resolve().parents[1] / "data" / "biomed.omn"
 biomed_doc = OMN.read_text()
 biomed_onto = omny.parse(biomed_doc)
 
