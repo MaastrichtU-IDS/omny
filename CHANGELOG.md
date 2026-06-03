@@ -2,6 +2,54 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.2.1] — 2026-06-03
+
+Skips `0.2.0` and `0.1.3` because the v0.2.0 and v0.1.3 tags were
+pushed without bumping `pyproject.toml`; both `publish.yml` runs
+built `omny-0.1.1.*` wheels which PyPI rejected as duplicates. PyPI
+was never updated. This release bundles the fixes that were meant
+to ship in those two tags + a CI guard that prevents the
+tag-vs-pyproject mismatch from silently failing again.
+
+### Correctness
+
+* **`fix(parse)` — rdfs:label/comment shorthand routes under the
+  actual rdfs IRIs** (PR #57). Pre-fix, an annotation written as
+  `Annotations: rdfs:comment "X"` could be routed under
+  `<http://schema.org/comment>` if the doc also declared
+  `schema:comment` (both share owlready2's `python_name="comment"`).
+  Closes the deferred lever from PR #44.
+
+### Performance
+
+* **`perf(parse)` — direct-write `(ind, rdf:type, type)` triples
+  for named-class Individual Types** (PR #58). Same pattern as
+  PR #49's SubClassOf direct-write; bypasses per-axiom owlready2
+  individual callback on individual-heavy ontologies. Negligible on
+  HP (few individuals); ~PR-#49-shape gain on OBI/SIO patterns.
+
+### Docs
+
+* **`docs(README)` — install info polish** (PR #56). Pointed
+  `pip install` at PyPI (was `-e .`), reconciled extras table with
+  current core deps, fixed Quick taste to not `import owlrl`
+  upfront (would `ImportError` on fresh installs).
+
+### CI / Release
+
+* **`ci` — version-vs-tag consistency guard in `publish.yml`**
+  (this release). When `publish.yml` runs on a tag push, it now
+  asserts that the tag (`vX.Y.Z`) matches `pyproject.toml`'s
+  `version = "X.Y.Z"` before attempting the build. A mismatch
+  fails loudly with a clear error message — no more silently-failed
+  PyPI uploads.
+
+### Bookkeeping
+
+* **`chore` — untrack `build/`** (PR #59). The directory was
+  accidentally committed during the rename; persistent
+  `M build/lib/omny/__init__.py` is gone.
+
 ## [0.1.1] — 2026-06-02 (packaging fix)
 
 Bug fix: `rdflib` was in `[project.optional-dependencies]` but

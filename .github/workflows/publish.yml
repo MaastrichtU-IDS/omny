@@ -19,6 +19,25 @@ jobs:
         with:
           python-version: "3.12"
 
+      - name: Verify tag matches pyproject.toml version
+        # Catches the silent-fail mode where a `vX.Y.Z` tag is pushed
+        # without bumping `pyproject.toml`: the build then produces a
+        # wheel named after the old version, and PyPI rejects it as a
+        # duplicate (existing upload). Fail loudly here, before the
+        # build step, with the exact mismatch.
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          tag_version="${GITHUB_REF#refs/tags/v}"
+          pyproject_version=$(python -c "import tomllib; print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])")
+          echo "tag version       : $tag_version"
+          echo "pyproject version : $pyproject_version"
+          if [ "$tag_version" != "$pyproject_version" ]; then
+            echo "::error::Tag v$tag_version does not match pyproject.toml version $pyproject_version."
+            echo "::error::Bump pyproject.toml to $tag_version (and update CHANGELOG.md), commit, re-tag, then push."
+            exit 1
+          fi
+          echo "tag and pyproject version match."
+
       - name: Install build tools
         run: |
           python -m pip install --upgrade pip
