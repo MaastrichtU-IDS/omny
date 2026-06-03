@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "omny"
-version = "0.1.1"
+version = "0.2.1"
 description = "Pure-Python Manchester OWL Syntax parser and renderer for owlready2, with a class-relation SPARQL query builder. No Java required."
 readme = "README.md"
 requires-python = ">=3.10"

@@ -104,18 +104,30 @@ Also visible at <https://pypi.org/project/omny/>.
 
 ## Subsequent releases
 
-Bump version in `pyproject.toml`, update `CHANGELOG.md`, tag, push:
+**Important: bump `pyproject.toml` *before* tagging.** If you tag
+without bumping, the build produces a wheel with the previous
+version number, PyPI rejects it as a duplicate, and the
+publish workflow fails silently as far as PyPI is concerned.
+Since 0.2.1, `publish.yml` has a guard that fails the workflow
+loudly with a clear "tag vX.Y.Z does not match pyproject version"
+error before the build step — but it's still better to do the bump
+in the same commit as the CHANGELOG note.
 
 ```bash
-# Edit pyproject.toml: version = "0.1.1"
-# Edit CHANGELOG.md: add a new section at the top
-git commit -am "release: 0.1.1"
+# 1. Bump pyproject.toml AND CHANGELOG.md in one commit on master
+sed -i 's/^version = .*/version = "0.2.2"/' pyproject.toml
+# (add a new ## [0.2.2] — YYYY-MM-DD section at the top of CHANGELOG.md)
+git commit -am "release: 0.2.2"
 git push
-git tag -a v0.1.1 -m "release 0.1.1"
-git push origin v0.1.1
+
+# 2. Tag and push (tag the commit that contains the bump)
+git tag -a v0.2.2 -m "release 0.2.2"
+git push origin v0.2.2
 ```
 
-The `publish.yml` workflow takes care of the rest.
+The `publish.yml` workflow takes care of the rest. If the tag-vs-pyproject
+versions don't match, the workflow fails at the "Verify tag matches
+pyproject.toml version" step before doing any work.
 
 ## If something goes wrong
 
