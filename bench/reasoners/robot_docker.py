@@ -22,6 +22,17 @@ class RobotDocker:
     def version(self) -> str:
         return self._run(["--version"]).stdout.strip()
 
+    def convert(self, src: Path, out: Path) -> Path:
+        """Convert between OWL serializations (e.g. RDF/XML → OWL/XML for
+        Konclude). ROBOT infers the target format from `out`'s extension."""
+        if src.parent.resolve() != out.parent.resolve():
+            raise ValueError("src and out must share a parent directory for docker mount")
+        self._run(
+            ["convert", "--input", src.name, "--output", out.name],
+            mount=src.parent,
+        )
+        return out
+
     def reason(self, src: Path, *, reasoner: str, out: Path) -> Path:
         if src.parent.resolve() != out.parent.resolve():
             raise ValueError("src and out must share a parent directory for docker mount")

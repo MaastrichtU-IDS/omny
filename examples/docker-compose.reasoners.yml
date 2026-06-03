@@ -1,0 +1,20 @@
+# Opt-in override: let notebook 06 run the ROBOT / Konclude reasoners *inside*
+# the compose `notebook` container.
+#
+#   docker compose -f docker-compose.yml -f docker-compose.reasoners.yml up --build
+#
+# Plain `docker compose up` (without this file) leaves the notebook container
+# with no docker socket, and NB06's reasoner cells skip cleanly.
+#
+# SECURITY: mounting the host docker socket gives this container root-equivalent
+# control of the host docker daemon. Use only for local demos you trust.
+services:
+  notebook:
+    environment:
+      # docker-out-of-docker: `docker run -v <path>` is resolved by the HOST
+      # daemon, so the scratch dir must live at the SAME absolute path on both
+      # host and container. `${PWD}` is the examples/ dir you run compose from.
+      OMNY_REASON_DIR: "${PWD}/.reason-scratch"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - "${PWD}/.reason-scratch:${PWD}/.reason-scratch"

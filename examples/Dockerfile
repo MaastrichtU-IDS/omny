@@ -1,10 +1,17 @@
 FROM python:3.12-slim
 
 # System deps: git is needed by some owlready2 paths; build-essential is a safety
-# net for any wheel that lacks a manylinux build.
+# net for any wheel that lacks a manylinux build; curl fetches the docker CLI.
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends git build-essential default-jre-headless \
+    && apt-get install -y --no-install-recommends git build-essential default-jre-headless curl ca-certificates \
     && rm -rf /var/lib/apt/lists/*
+
+# Docker *client* only (no daemon). Notebook 06's ROBOT/Konclude cells shell out
+# to `docker run …` against a host socket mounted via docker-compose.reasoners.yml.
+# Harmless without that override: the cells probe `docker info` and skip if no
+# daemon answers. Pinned static binary keeps the image lean (just the CLI).
+RUN curl -fsSL https://download.docker.com/linux/static/stable/x86_64/docker-27.3.1.tgz \
+    | tar -xz -C /usr/local/bin --strip-components=1 docker/docker
 
 # JupyterLab + jupytext + an HTTP client for the remote-endpoint notebook.
 RUN pip install --no-cache-dir jupyterlab==4.* jupytext==1.* requests
