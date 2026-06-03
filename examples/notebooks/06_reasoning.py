@@ -3,16 +3,18 @@
 #
 # `omny.parse()` returns a regular `owlready2.Ontology`, so any reasoner that
 # integrates with owlready2 or with an RDF graph works on it.  This notebook
-# walks through two reasoners side-by-side on the same ontology and compares
-# their effect on `.descendants()` / `.ancestors()` / `.instances()`:
+# walks through four reasoners on the same ontology and compares their effect
+# on `.descendants()` / `.ancestors()` / `.instances()` (and on the SPARQL
+# `class_relations_query`):
 #
 # 1. **owlrl** — pure-Python OWL 2 RL closure (no Java, runs in-process).
 # 2. **HermiT** — Java-backed OWL 2 DL reasoner, called via owlready2's
 #    `sync_reasoner_hermit()` JPype bridge.
+# 3. **ROBOT docker** — HermiT / ELK / JFact run inside the `obolibrary/robot`
+#    container, reusing `bench/reasoners/robot_docker.py`.
+# 4. **Konclude docker** — OWL 2 DL classification via `bench/reasoners/konclude.py`.
 #
-# The bench harness also wraps **ELK, JFact, Konclude** under `bench/reasoners/`
-# (ROBOT-docker and konclude-docker); the same pattern applies if you want to
-# add those reasoners to your own pipeline.
+# Sections 3–4 need a reachable host docker daemon and skip cleanly without one.
 #
 # **No reasoning by default.**  omny itself is reasoner-free — `omny.parse()`
 # produces only the asserted axioms.  Any inference below is the reasoner's
@@ -182,21 +184,160 @@ for k in keys:
 # EquivalentTo definition), so `MozzarellaPizza.descendants` grows from
 # `[MozzarellaPizza]` to include `MyPizza`, and `MozzarellaPizza.instances`
 # now contains `myPizza1`.
+
+# %% [markdown]
+# ## 3. ROBOT docker — HermiT / ELK / JFact on the `obolibrary/robot` image
 #
+# The reasoners above run *in-process* (owlrl) or via a bundled JDK (HermiT
+# through owlready2's JPype bridge).  The bench harness also drives reasoners as
+# **docker containers**, which is handy when you'd rather not ship a JDK in your
+# Python image: `bench/reasoners/robot_docker.py` wraps
+# `docker run obolibrary/robot reason …` and `bench/reasoners/konclude.py` wraps
+# Konclude.  We reuse those exact helpers here.
+#
+# These cells need a reachable **docker daemon**.  Plain `docker compose up`
+# gives the `notebook` container no docker socket, so they detect its absence
+# and skip cleanly.  To actually run them inside the container, start the stack
+# with the opt-in override that mounts the host socket + a shared scratch dir:
+#
+# ```bash
+# docker compose -f docker-compose.yml -f docker-compose.reasoners.yml up --build
+# ```
+#
+# (Or run this notebook directly on a host that has docker.)
+
+# %%
+import os
+import shutil
+import subprocess
+import sys
+import tempfile
+from pathlib import Path
+
+import rdflib
+
+from omny import class_relations_query
+from omny.store import run_rdflib
+
+# Make the repo-root `bench` package importable regardless of the kernel's cwd
+# (Jupyter starts kernels in the notebook's own directory, not the repo root).
+REPO_ROOT = Path.cwd()
+while not (REPO_ROOT / "bench").is_dir() and REPO_ROOT != REPO_ROOT.parent:
+    REPO_ROOT = REPO_ROOT.parent
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
+
+def _docker_reachable():
+    """True only if a docker CLI exists *and* a daemon answers — so an image
+    that ships the CLI but has no socket mounted still skips cleanly."""
+    if shutil.which("docker") is None:
+        return False
+    try:
+        return subprocess.run(["docker", "info"], capture_output=True).returncode == 0
+    except OSError:
+        return False
+
+
+HAVE_DOCKER = _docker_reachable()
+
+# The docker reasoners consume a file, not the in-memory owlready2 world, so
+# serialize once to RDF/XML (owlready2's native format).  ROBOT converts this to
+# OWL/XML for Konclude below.
+#
+# `docker run -v` paths are resolved by the *host* daemon, so when we're inside
+# the compose container the scratch dir must be a path the host sees at the same
+# location — `docker-compose.reasoners.yml` bind-mounts `OMNY_REASON_DIR` to an
+# identical path on both sides.  On a docker host (no env var) a private tempdir
+# is fine.
+reason_dir = os.environ.get("OMNY_REASON_DIR")
+if reason_dir:
+    workdir = Path(reason_dir)
+    workdir.mkdir(parents=True, exist_ok=True)
+else:
+    workdir = Path(tempfile.mkdtemp(prefix="omny-reason-"))
+src = workdir / "reason-demo.owl"
+onto.save(file=str(src), format="rdfxml")
+
+
+def subclasses_of(graph, cls_iri):
+    """Local names of the subclasses of `cls_iri` in `graph`, via the same
+    SPARQL omny built for the owlrl section above."""
+    q = class_relations_query(f"<{cls_iri}>", relations=("sub",), construct=False)
+    return sorted(str(r[0]).rsplit("/", 1)[-1] for r in run_rdflib(q, graph))
+
+
+def load_graph(path, fmt="turtle"):
+    g_ = rdflib.Graph()
+    g_.parse(str(path), format=fmt)
+    return g_
+
+
+# The DL inference to watch: MyPizza ⊑ MozzarellaPizza (via the EquivalentTo
+# definition).  owlrl (OWL 2 RL) does NOT derive it; the DL reasoners below do.
+# `g` is the owlrl-saturated graph from section 1.
+print("owlrl    MozzarellaPizza subclasses:", subclasses_of(g, NS + "MozzarellaPizza"))
+print("docker reachable:", HAVE_DOCKER)
+
+# %%
+# ROBOT `reason` materializes the inferred class hierarchy into a new artefact.
+# We ask for Turtle output so it loads straight into rdflib and reuses the same
+# `class_relations_query` as every section above.
+if HAVE_DOCKER:
+    from bench.reasoners.robot_docker import RobotDocker
+
+    robot = RobotDocker()
+    try:
+        print("ROBOT:", robot.version().splitlines()[0])
+        hermit_ttl = robot.reason(src, reasoner="HermiT", out=src.with_suffix(".hermit.ttl"))
+        g_robot = load_graph(hermit_ttl)
+        print("ROBOT/HermiT MozzarellaPizza subclasses:",
+              subclasses_of(g_robot, NS + "MozzarellaPizza"))
+    except (subprocess.CalledProcessError, FileNotFoundError) as e:
+        print("ROBOT run failed (image not pulled / daemon down?):", e)
+else:
+    print("ROBOT requires a host docker daemon — see bench/reasoners/robot_docker.py")
+
+# %% [markdown]
+# ## 4. Konclude docker — OWL 2 DL classification
+#
+# Konclude requires **OWL/XML** input (see `bench/reasoners/konclude.py`), so we
+# use ROBOT to convert RDF/XML → OWL/XML first, classify, then convert the
+# inferred result back to Turtle for the same rdflib query.  Konclude is the
+# fastest OWL 2 DL reasoner on the bench corpus.
+
+# %%
+if HAVE_DOCKER:
+    from bench.reasoners.konclude import KoncludeReasoner
+    from bench.reasoners.robot_docker import RobotDocker
+
+    robot = RobotDocker()
+    try:
+        owx = robot.convert(src, src.with_suffix(".owx"))             # RDF/XML → OWL/XML
+        classified = KoncludeReasoner().materialise(owx)              # → *.konclude.owx
+        konclude_ttl = robot.convert(classified, classified.with_suffix(".ttl"))
+        g_konclude = load_graph(konclude_ttl)
+        print("Konclude MozzarellaPizza subclasses:",
+              subclasses_of(g_konclude, NS + "MozzarellaPizza"))
+    except (subprocess.CalledProcessError, FileNotFoundError) as e:
+        print("Konclude run failed (image not pulled / daemon down?):", e)
+else:
+    print("Konclude requires a host docker daemon — see bench/reasoners/konclude.py")
+
+# %% [markdown]
 # ## Other reasoners omny integrates with
 #
-# - **`owlready2.sync_reasoner_pellet()`** — same JPype pattern as HermiT, full
-#   DL.
-# - **ROBOT docker** (`HermiT` / `JFact` / `ELK`) — useful when you want
-#   reproducible inference materialization without bundling a JDK in your
-#   Python environment.  `bench/reasoners/robot_docker.py` shows the wrapper.
-# - **Konclude docker** — fastest OWL 2 DL reasoner on this corpus
-#   (`bench/reasoners/konclude.py`).
+# - **`owlready2.sync_reasoner_pellet()`** — same in-process JPype pattern as
+#   HermiT (section 2), full OWL 2 DL.
+# - **ELK / JFact** — swap the `reasoner=` argument in the ROBOT cell
+#   (`"ELK"`, `"JFact"`); `bench/reasoners/elk.py` and `jfact.py` are thin
+#   wrappers over the same `RobotDocker.reason`.
 #
-# All four are implemented and unit-tested in the perf-bench harness; the
-# integration pattern is the same — call the reasoner on an .omn/.owx file,
-# load the result back via `omny.parse` (or directly into an RDF store) and
-# query with `class_relations_query`.
+# All of these are implemented and unit-tested in the perf-bench harness under
+# `bench/reasoners/`.  The integration pattern is uniform: materialize
+# inferences to a file, load that file back (owlready2 for the in-process
+# reasoners, rdflib for the docker artefacts), and query with
+# `class_relations_query`.
 
 # %% [markdown]
 # ## Takeaway

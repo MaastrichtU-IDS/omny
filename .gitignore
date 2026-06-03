@@ -13,3 +13,6 @@ bench/cache/
 # Local build artifacts from `python -m build`
 build/
 dist/
+
+# Scratch dir for NB06 docker reasoners (docker-compose.reasoners.yml)
+examples/.reason-scratch/
