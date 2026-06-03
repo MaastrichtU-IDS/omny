@@ -15,7 +15,9 @@ from pathlib import Path
 import omny
 from omny import class_relations_query
 
-omn = Path("/workspace/examples/data/biomed.omn").read_text()
+# Resolve relative to this file so the script runs from any cwd
+# (jupyter notebooks share the same path via the paired .ipynb).
+omn = (Path(__file__).resolve().parents[1] / "data" / "biomed.omn").read_text()
 onto = omny.parse(omn)
 NS = "http://example.org/biomed#"
 print("Loaded", len(list(onto.classes())), "classes")
