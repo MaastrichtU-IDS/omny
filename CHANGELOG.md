@@ -2,6 +2,22 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.2.2] — 2026-06-03
+
+### Fixed
+
+* **Example notebooks 02 / 03 / 04 are portable again** (PR #61).
+  Pre-fix the three notebooks hardcoded either
+  `/workspace/examples/data/biomed.omn` (a docker-compose bind-mount
+  path) or a cwd-dependent `Path("..") / "data" / …`, so anyone
+  trying to follow the notebooks outside the docker-compose context
+  hit `FileNotFoundError`. The `.py` paired files now use
+  `Path(__file__).resolve().parents[1] / "data" / "biomed.omn"`, and
+  the `.ipynb` files use `Path("..") / "data" / "biomed.omn"` (works
+  in Jupyter UI from either local or compose context). Notebooks 01,
+  02, and 04 now run end-to-end as scripts; 03 still needs the live
+  oxigraph triplestore; 05 needs Jupyter; 06 needs Java for HermiT.
+
 ## [0.2.1] — 2026-06-03
 
 Skips `0.2.0` and `0.1.3` because the v0.2.0 and v0.1.3 tags were
