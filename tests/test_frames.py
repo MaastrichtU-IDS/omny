@@ -1,6 +1,5 @@
 import rdflib
 import owlready2
-import pytest
 from omny import parse
 
 
@@ -339,7 +338,7 @@ def test_subpropertychain_with_inverse_link():
     assert chain[0].property.iri == "http://ex.org/a"
     assert chain[1].iri == "http://ex.org/b"
     out = render(onto, prefixes={"": "http://ex.org/"})
-    chain_lines = [l.strip() for l in out.splitlines() if "SubPropertyChain" in l]
+    chain_lines = [ln.strip() for ln in out.splitlines() if "SubPropertyChain" in ln]
     assert chain_lines == ["SubPropertyChain: inverse :a o :b"]
     # Re-parse the rendered form to confirm the inverse link survives a cycle.
     onto2 = parse(out)
