@@ -559,6 +559,56 @@ def test_inverseof_inverse_expression_warns_keeps_frame():
     assert any("InverseOf" in str(w.message) for w in caught)
 
 
+def test_object_property_equivalent_and_disjoint():
+    """Issue #71: ``EquivalentTo:`` / ``DisjointWith:`` on an ObjectProperty
+    frame are parsed (previously silently dropped) and round-trip on render,
+    including ``inverse (P)`` operands in EquivalentTo."""
+    from omny import render
+    doc = """
+    Prefix: : <http://ex.org/>
+    ObjectProperty: :p
+    ObjectProperty: :q
+    ObjectProperty: :s
+    ObjectProperty: :r
+        EquivalentTo: :q, inverse (:s)
+        DisjointWith: :p
+    """
+    onto = parse(doc)
+    r = onto.world["http://ex.org/r"]
+    eq_named = {e.iri for e in r.equivalent_to if hasattr(e, "iri")}
+    assert "http://ex.org/q" in eq_named
+    assert any(isinstance(e, owlready2.Inverse)
+               and e.property.iri == "http://ex.org/s" for e in r.equivalent_to)
+    assert any(r in d.entities and onto.world["http://ex.org/p"] in d.entities
+               for d in onto.disjoint_properties())
+    # round-trips through render
+    out = render(onto, prefixes={"": "http://ex.org/"})
+    r2 = parse(out).world["http://ex.org/r"]
+    assert {e.iri for e in r2.equivalent_to if hasattr(e, "iri")} >= {"http://ex.org/q"}
+    assert any(isinstance(e, owlready2.Inverse) for e in r2.equivalent_to)
+
+
+def test_data_property_equivalent_and_disjoint():
+    """``EquivalentTo:`` / ``DisjointWith:`` on a DataProperty frame are parsed
+    and round-trip."""
+    from omny import render
+    doc = """
+    Prefix: : <http://ex.org/>
+    DataProperty: :d1
+    DataProperty: :d2
+        EquivalentTo: :d1
+        DisjointWith: :d1
+    """
+    onto = parse(doc)
+    d2 = onto.world["http://ex.org/d2"]
+    assert onto.world["http://ex.org/d1"] in d2.equivalent_to
+    assert any(d2 in d.entities and onto.world["http://ex.org/d1"] in d.entities
+               for d in onto.disjoint_properties())
+    out = render(onto, prefixes={"": "http://ex.org/"})
+    assert "EquivalentTo: :d1" in out
+    assert "DisjointWith:" in out
+
+
 def test_disjoint_union_of():
     """``DisjointUnionOf: A, B, C`` on a class records the OWL 2 semantics:
     the class is EquivalentTo the union of the members, and the members are
