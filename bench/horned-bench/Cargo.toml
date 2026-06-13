@@ -1,0 +1,13 @@
+[package]
+name = "horned-bench"
+version = "0.0.0"
+edition = "2021"
+
+[dependencies]
+horned-owl = { path = "/data/dumontier/horned-owl-omn", default-features = false }
+horned-owl-014 = { package = "horned-owl", version = "0.14" }
+horned-manchester = { path = "/data/dumontier/pymos/_ref_horned-manchester" }   # pulls horned-owl 0.14 — coexists with the path 1.4
+
+[[bin]]
+name = "horned-bench"
+path = "src/main.rs"
