@@ -6,6 +6,19 @@ All notable changes to this project will be documented in this file.
 
 ### Fixed
 
+* **Anonymous (blank-node) individuals are parsed** (issue #69). An
+  `Individual: _:label` frame (nodeID, per Manchester `individual ::=
+  individualIRI | nodeID`) had its `_:label` subject fed to the CURIE
+  resolver, which raised `Unknown prefix '_'` and dropped the whole frame.
+  `EntityResolver.get_individual` now detects a nodeID and returns an
+  owlready2 anonymous individual (a fresh blank-node storid anchored with
+  `rdf:type owl:NamedIndividual`), applying the frame's
+  `Types:`/`Facts:`/`Annotations:` to it. Repeated `_:label` references in
+  one document resolve to the same blank node. (Anonymous individuals are
+  not re-emitted as standalone frames by `render` — owlready2 does not
+  surface them via `individuals()` — but their asserted triples are
+  preserved.)
+
 * **Axiom-level (inline) `Annotations:` no longer swallow the annotated
   operand** (issue #67). Per the OWL 2 Manchester grammar an annotated-list
   entry is `[annotations] operand`, so an `Annotations:` block may sit in
