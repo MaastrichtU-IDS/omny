@@ -27,9 +27,10 @@ _FRAME_RE = re.compile(
 
 # Axiom keywords that introduce operand lists inside a frame body
 _AXIOM_KEYWORDS = (
-    "SubClassOf", "EquivalentTo", "DisjointWith", "Domain", "Range",
-    "Characteristics", "SubPropertyOf", "InverseOf", "Types", "Facts",
-    "SameAs", "DifferentFrom", "Annotations", "HasKey",
+    "SubClassOf", "EquivalentTo", "DisjointUnionOf", "DisjointWith",
+    "Domain", "Range", "Characteristics", "SubPropertyChain", "SubPropertyOf",
+    "InverseOf", "Types", "Facts", "SameAs", "DifferentFrom", "Annotations",
+    "HasKey",
 )
 _SECTION_RE = re.compile(
     r"^\s*(" + "|".join(_AXIOM_KEYWORDS) + r"):",

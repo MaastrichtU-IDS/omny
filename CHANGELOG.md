@@ -2,6 +2,40 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Fixed
+
+* **Manchester reader no longer silently drops valid OWL 2 constructs**
+  (issue #66). Two valid Manchester Syntax forms — accepted by the OWL
+  API / ROBOT — were emitting a `UserWarning` and discarding the
+  axiom/frame instead of parsing it:
+  * **Typed/lang literals in `Facts:`** — a datatype literal such as
+    `:hasBirthYear "1868"^^xsd:integer` was mis-tokenised by splitting on
+    the last `:` (treating `"1868"^^xsd` as a CURIE prefix), which raised
+    `Unknown prefix` and dropped the **entire `Individual:` frame**. The
+    Facts value parser now recognises the three quoted-literal forms —
+    plain `"…"`, typed `"…"^^datatypeIRI`, and language-tagged `"…"@lang`
+    — splitting the `^^`/`@` separator after the closing quote. Lang tags
+    are preserved as `locstr` and round-trip through `render`.
+  * **`SubPropertyChain:`** — the standard object-property frame keyword
+    was unrecognised and its axiom dropped. It is now parsed into a
+    `SubObjectPropertyOf(ObjectPropertyChain(...), prop)` (owlready2
+    `property_chain`) and rendered back out. Chain links may be
+    `inverse (P)` expressions (used heavily by RO, e.g.
+    `inverse (RO_0002176) o RO_0002176`); these are written as RDF
+    (`owl:inverseOf` blank node in the `owl:propertyChainAxiom` list) since
+    an `Inverse` link has no storid for owlready2's high-level API.
+
+  Surfaced while validating against SIO, RO and SULO, the same family of
+  silently-dropped construct was also fixed:
+
+  * **`DisjointUnionOf:`** — was an unrecognised class-frame keyword (used
+    by SULO, e.g. `Feature DisjointUnionOf: Capability, …`). Now recorded
+    with OWL 2 semantics: the class is `EquivalentTo` the union of the
+    members plus an `AllDisjoint` over them (owlready2 has no native
+    disjoint-union construct).
+
 ## [0.2.2] — 2026-06-03
 
 ### Fixed

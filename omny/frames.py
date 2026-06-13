@@ -1,4 +1,5 @@
 """Manchester document/frame loader: populates an owlready2 ontology."""
+import re
 import warnings
 from typing import Dict, List, Optional, Tuple
 
@@ -15,9 +16,11 @@ from omny._frame_tokeniser import (
     _MISC_KEYWORDS,
     _ONTOLOGY_RE,
     _PREFIX_RE,
+    _STRING_LITERAL_RE,
 )
 from omny.entities import EntityResolver
 from omny._lark_parser import LarkManchesterParser as ManchesterParser
+from omny._lark_parser import _datatype_to_python_type
 
 
 def parse(text: str, onto: Optional[owlready2.Ontology] = None,
@@ -378,7 +381,28 @@ class FrameLoader:
         if disjoints:
             with self.r.onto:
                 owlready2.AllDisjoint([cls, *disjoints])
+        self._assert_disjoint_union(cls, sections.get("DisjointUnionOf", []))
         self._apply_annotations(cls, sections.get("Annotations", []))
+
+    def _assert_disjoint_union(self, cls, member_names: List[str]) -> None:
+        """Assert ``DisjointUnion(cls, members)`` from the member list.
+
+        OWL 2's ``DisjointUnionOf: A, B, C`` means ``cls`` is *equivalent to*
+        the union of the members **and** the members are pairwise disjoint.
+        owlready2 has no native disjoint-union construct, so it is recorded as
+        an ``EquivalentTo`` union plus an ``AllDisjoint`` — semantically
+        equivalent, the way the OWL API itself expands it. Used by SULO
+        (``Feature DisjointUnionOf: Capability, InformationObject, …``).
+
+        ``member_names`` is the already comma-split operand list from
+        ``_split_sections``.
+        """
+        members = [self.r.get_class(m) for m in member_names]
+        if len(members) < 2:
+            return
+        cls.equivalent_to.append(owlready2.Or(members))
+        with self.r.onto:
+            owlready2.AllDisjoint(members)
 
     @staticmethod
     def _safe_append_is_a(entity, value, *, kind: str, subject: str) -> None:
@@ -497,7 +521,95 @@ class FrameLoader:
             p.inverse_property = self.r.get_object_property(inv)
         for sup in sections.get("SubPropertyOf", []):
             p.is_a.append(self.r.get_object_property(sup))
+        for chain in sections.get("SubPropertyChain", []):
+            self._assert_property_chain(p, chain)
         self._apply_annotations(p, sections.get("Annotations", []))
+
+    def _assert_property_chain(self, prop, chain: str) -> None:
+        """Assert ``SubObjectPropertyOf(ObjectPropertyChain(...), prop)``.
+
+        The Manchester ``SubPropertyChain:`` operand is a chain of object
+        property *expressions* separated by `` o `` (e.g. ``partOf o partOf``).
+        The chain is the *sub* property of the frame's property — a common OBO
+        construct (RO/GO role chains).
+
+        Each link is a named property or an inverse expression ``inverse (P)``
+        (RO uses ``inverse (RO_0002176) o RO_0002176``). owlready2 models the
+        all-named case via ``prop.property_chain.append(PropertyChain([...]))``;
+        an inverse link has no storid for that high-level API, so a chain that
+        contains one is written as RDF directly (an ``owl:inverseOf`` blank
+        node inside the ``owl:propertyChainAxiom`` list), which owlready2
+        reads back as an ``Inverse(...)`` link.
+        """
+        tokens = self._split_chain(chain)
+        if not tokens:
+            return
+        if any(self._inverse_target(tok) is not None for tok in tokens):
+            self._write_property_chain_rdf(prop, tokens)
+        else:
+            links = [self.r.get_object_property(tok) for tok in tokens]
+            prop.property_chain.append(owlready2.PropertyChain(links))
+
+    @staticmethod
+    def _split_chain(chain: str) -> List[str]:
+        """Split a property chain on the `` o `` composition operator.
+
+        Splits on whitespace-delimited ``o`` only, so it does not break
+        property names that merely contain the letter (e.g. ``hasParto``).
+        """
+        return [tok for tok in re.split(r"\s+o\s+", chain.strip()) if tok]
+
+    # ``inverse (P)`` / ``inverse(P)`` / ``inverse P`` — the OWL 2
+    # ObjectInverseOf expression usable wherever an object-property
+    # expression is expected (chain links, InverseOf operands).
+    _INVERSE_RE = re.compile(r"^inverse\s*\(?\s*(.+?)\s*\)?$", re.I)
+
+    @classmethod
+    def _inverse_target(cls, token: str) -> Optional[str]:
+        """Return the inner property name if *token* is ``inverse (P)``, else None."""
+        t = token.strip()
+        if not t.lower().startswith("inverse"):
+            return None
+        m = cls._INVERSE_RE.match(t)
+        return m.group(1).strip() if m else None
+
+    _RDF = "http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+    _OWL = "http://www.w3.org/2002/07/owl#"
+
+    def _write_property_chain_rdf(self, prop, tokens: List[str]) -> None:
+        """Write ``prop owl:propertyChainAxiom ( link... )`` as RDF triples,
+        supporting ``inverse (P)`` links (which the high-level
+        ``PropertyChain`` API cannot express because an ``Inverse`` construct
+        has no storid). The ``prop`` Python cache is invalidated at end of
+        parse so ``prop.property_chain`` lazy-reloads from the triples.
+        """
+        world = self.r.world
+        g = self.r.onto.graph
+        ab = world._abbreviate
+        first = ab(self._RDF + "first")
+        rest = ab(self._RDF + "rest")
+        nil = ab(self._RDF + "nil")
+        chain_ax = ab(self._OWL + "propertyChainAxiom")
+        inverse_of = ab(self._OWL + "inverseOf")
+
+        link_storids = []
+        for tok in tokens:
+            inner = self._inverse_target(tok)
+            if inner is None:
+                link_storids.append(self.r.get_object_property(tok).storid)
+            else:
+                inv_node = world.new_blank_node()
+                target = self.r.get_object_property(inner)
+                g._add_obj_triple_raw_spo(inv_node, inverse_of, target.storid)
+                link_storids.append(inv_node)
+
+        cells = [world.new_blank_node() for _ in link_storids]
+        for i, (cell, link) in enumerate(zip(cells, link_storids)):
+            g._add_obj_triple_raw_spo(cell, first, link)
+            nxt = cells[i + 1] if i + 1 < len(cells) else nil
+            g._add_obj_triple_raw_spo(cell, rest, nxt)
+        g._add_obj_triple_raw_spo(prop.storid, chain_ax, cells[0])
+        self._direct_write_dirty.add(prop.storid)
 
     def _handle_data_property(self, subject: str, sections: dict) -> None:
         p = self.r.get_data_property(subject)
@@ -546,9 +658,12 @@ class FrameLoader:
         self._append_property_value(ind, prop, value)
 
     def _literal_or_individual(self, raw: str):
-        """Parse a fact value: quoted string, boolean, int, float, or individual name."""
-        if raw.startswith('"') and raw.endswith('"'):
-            return raw[1:-1]
+        """Parse a fact value: a quoted literal (plain ``"..."``, typed
+        ``"..."^^datatype``, or language-tagged ``"..."@lang``), a bare
+        boolean/int/float, or an individual name.
+        """
+        if raw.startswith('"'):
+            return self._parse_quoted_literal(raw)
         if raw.lower() in ("true", "false"):
             return raw.lower() == "true"
         try:
@@ -560,6 +675,40 @@ class FrameLoader:
         except ValueError:
             pass
         return self.r.get_individual(raw)
+
+    @staticmethod
+    def _parse_quoted_literal(raw: str):
+        """Parse a quoted Manchester literal into a Python value.
+
+        Handles the three OWL 2 literal forms whose value side is a quoted
+        string: plain ``"lexical"``, typed ``"lexical"^^datatypeIRI``, and
+        language-tagged ``"lexical"@lang``.
+
+        The ``^^`` / ``@`` separator must be located *after* the closing
+        quote of the lexical form. Previously a typed literal flowed into the
+        individual-name path, whose CURIE resolver split on the **last** ``:``
+        — turning ``"1868"^^xsd:integer`` into prefix ``"1868"^^xsd`` /
+        local ``integer`` and raising ``Unknown prefix``, which dropped the
+        entire ``Individual:`` frame (issue #66).
+        """
+        from omny.parser import unescape_quoted_string
+        m = _STRING_LITERAL_RE.match(raw)
+        if m is None:
+            # No well-formed closing quote; treat the whole thing as a string.
+            return raw[1:-1] if len(raw) >= 2 and raw.endswith('"') else raw
+        lexical = unescape_quoted_string(m.group(0)[1:-1])
+        suffix = raw[m.end():].strip()
+        if suffix.startswith("^^"):
+            datatype = suffix[2:].strip()
+            py_type = _datatype_to_python_type(datatype)
+            if py_type is bool:
+                return lexical.strip().lower() == "true"
+            if py_type in (int, float):
+                return py_type(lexical)
+            return lexical
+        if suffix.startswith("@"):
+            return owlready2.locstr(lexical, suffix[1:].strip())
+        return lexical
 
     def _assert_same_as(self, a, b) -> None:
         """Assert owl:sameAs(a, b) via a low-level triple insert."""
