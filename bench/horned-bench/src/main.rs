@@ -13,6 +13,17 @@ use horned_owl::ontology::set::SetOntology;
 type Set = SetOntology<Rc<str>>;
 type Amo = ComponentMappedOntology<Rc<str>, Rc<AnnotatedComponent<Rc<str>>>>;
 
+/// Read an RDF/XML file into a SetOntology.
+/// The rdf reader returns `ConcreteRDFOntology<RcStr, RcAnnotatedComponent>` which
+/// implements `From<...> for SetOntology<RcStr>`, so `.into()` is a zero-copy collect.
+fn read_rdf_to_set(text: &str) -> Set {
+    let mut br = BufReader::new(text.as_bytes());
+    let (rdf_ont, _incomp) =
+        horned_owl::io::rdf::reader::read(&mut br, ParserConfiguration::default())
+            .expect("rdf parse");
+    rdf_ont.into()
+}
+
 fn arg(flag: &str, default: &str) -> String {
     let a: Vec<String> = std::env::args().collect();
     a.iter().position(|x| x == flag).and_then(|i| a.get(i + 1)).cloned()
@@ -64,7 +75,47 @@ fn main() {
                 let _ = horned_owl::io::omn::write(Vec::<u8>::new(), &amo, Some(&pm)).expect("omn write");
             })
         }
-        other => panic!("unsupported (format,mode) = {other:?} (added in later tasks)"),
+        ("ofn", "parse") => time_it(warmup, hot, || {
+            let (o, _): (Set, _) = horned_owl::io::ofn::reader::read(
+                BufReader::new(text.as_bytes()), ParserConfiguration::default()).expect("ofn parse");
+            component_count = o.iter().count();
+        }),
+        ("ofn", "render") => {
+            let (o, pm): (Set, _) = horned_owl::io::ofn::reader::read(
+                BufReader::new(text.as_bytes()), ParserConfiguration::default()).expect("ofn parse");
+            component_count = o.iter().count();
+            let amo: Amo = o.into();
+            time_it(warmup, hot, || {
+                let _ = horned_owl::io::ofn::writer::write(Vec::<u8>::new(), &amo, Some(&pm)).expect("ofn write");
+            })
+        }
+        ("owx", "parse") => time_it(warmup, hot, || {
+            let (o, _): (Set, _) = horned_owl::io::owx::reader::read(
+                &mut BufReader::new(text.as_bytes()), ParserConfiguration::default()).expect("owx parse");
+            component_count = o.iter().count();
+        }),
+        ("owx", "render") => {
+            let (o, pm): (Set, _) = horned_owl::io::owx::reader::read(
+                &mut BufReader::new(text.as_bytes()), ParserConfiguration::default()).expect("owx parse");
+            component_count = o.iter().count();
+            let amo: Amo = o.into();
+            time_it(warmup, hot, || {
+                let _ = horned_owl::io::owx::writer::write(Vec::<u8>::new(), &amo, Some(&pm)).expect("owx write");
+            })
+        }
+        ("rdf", "parse") => time_it(warmup, hot, || {
+            let o = read_rdf_to_set(&text);
+            component_count = o.iter().count();
+        }),
+        ("rdf", "render") => {
+            let o = read_rdf_to_set(&text);
+            component_count = o.iter().count();
+            let amo: Amo = o.into();
+            time_it(warmup, hot, || {
+                let _ = horned_owl::io::rdf::writer::write(Vec::<u8>::new(), &amo).expect("rdf write");
+            })
+        }
+        other => panic!("unsupported (format,mode) = {other:?}"),
     };
 
     println!("{{\"format\":\"{format}\",\"mode\":\"{mode}\",\
