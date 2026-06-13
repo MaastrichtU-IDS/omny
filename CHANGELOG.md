@@ -6,6 +6,20 @@ All notable changes to this project will be documented in this file.
 
 ### Fixed
 
+* **Axiom-level (inline) `Annotations:` no longer swallow the annotated
+  operand** (issue #67). Per the OWL 2 Manchester grammar an annotated-list
+  entry is `[annotations] operand`, so an `Annotations:` block may sit in
+  operand position — directly after an axiom keyword or after a top-level
+  comma. omny treated that inline `Annotations:` as a new frame clause, so
+  the real operand bled into a phantom annotation section and the axiom was
+  silently lost. `_split_sections` now recognises an inline `Annotations:`
+  (preceded only by whitespace or a comma) and folds it into the enclosing
+  section; the leading `Annotations: annProp annValue` prefix is then
+  stripped from the operand. The axiom annotation itself is discarded for
+  now (the operand is preserved). This recovers e.g. RO's annotated
+  `SubPropertyChain:` axioms — RO now parses 160/160 chains (was 152) — and
+  the annotation-on-annotation form inside a frame `Annotations:` list.
+
 * **`inverse (P)` object-property expressions accepted outside property
   chains** (issue #68). A `SubPropertyOf:` operand of the form
   `inverse (P)` (OWL 2 `ObjectInverseOf`, used by RO, e.g.
