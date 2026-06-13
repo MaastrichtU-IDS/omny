@@ -397,6 +397,55 @@ def test_annotation_on_annotation_preserves_real_annotations():
     assert p.label == ["the label"]
 
 
+def test_anonymous_individual_frame_not_dropped():
+    """Issue #69: an ``Individual: _:label`` frame (blank node) is parsed
+    against an owlready2 anonymous individual, applying its Types/Facts —
+    previously the ``_:`` subject was treated as a CURIE (``Unknown prefix
+    '_'``) and the whole frame was dropped."""
+    import rdflib
+    import warnings
+    doc = """
+    Prefix: : <http://ex.org/>
+    Class: C
+    DataProperty: :hasAge
+    Individual: _:b1
+        Types: C
+        Facts: :hasAge 42
+    """
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        onto = parse(doc)
+    g = onto.world.as_rdflib_graph()
+    blanks = {s for s in g.subjects() if isinstance(s, rdflib.BNode)}
+    assert len(blanks) == 1
+    b = next(iter(blanks))
+    types = {str(o) for o in g.objects(b, rdflib.RDF.type)}
+    assert "http://ex.org/C" in types
+    ages = {int(o) for o in g.objects(b, rdflib.URIRef("http://ex.org/hasAge"))}
+    assert ages == {42}
+
+
+def test_anonymous_individual_two_frames_same_blank_node():
+    """Two ``Individual: _:b`` frames for the same nodeID populate one blank
+    node (axioms merged), not two."""
+    import rdflib
+    doc = """
+    Prefix: : <http://ex.org/>
+    DataProperty: :hasAge
+    Individual: _:b
+        Facts: :hasAge 1
+    Individual: _:b
+        Facts: :hasAge 2
+    """
+    onto = parse(doc)
+    g = onto.world.as_rdflib_graph()
+    blanks = {s for s in g.subjects() if isinstance(s, rdflib.BNode)}
+    assert len(blanks) == 1
+    b = next(iter(blanks))
+    ages = {int(o) for o in g.objects(b, rdflib.URIRef("http://ex.org/hasAge"))}
+    assert ages == {1, 2}
+
+
 def test_subpropertychain_with_inverse_link():
     """A chain link may be an ``inverse (P)`` expression (heavily used by RO,
     e.g. ``inverse (RO_0002176) o RO_0002176``). The inverse link has no

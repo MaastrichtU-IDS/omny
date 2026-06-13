@@ -36,3 +36,21 @@ def test_unknown_prefix_raises(onto):
     r = EntityResolver(onto, prefixes={})
     with pytest.raises(ValueError):
         r.get_class("bogus:Thing")
+
+
+def test_anonymous_individual_blank_node(onto):
+    """Issue #69: a nodeID (``_:label``) resolves to an owlready2 anonymous
+    individual (blank node) rather than being CURIE-expanded."""
+    r = EntityResolver(onto, prefixes={})
+    ind = r.get_individual("_:b1")
+    assert isinstance(ind, owlready2.Thing)
+    # blank node: negative storid, no real IRI
+    assert ind.storid < 0
+    assert not getattr(ind, "name", "")
+
+
+def test_anonymous_individual_reused_within_parse(onto):
+    """Repeated references to the same nodeID map to the same blank node."""
+    r = EntityResolver(onto, prefixes={})
+    assert r.get_individual("_:b1") is r.get_individual("_:b1")
+    assert r.get_individual("_:b1") is not r.get_individual("_:b2")
