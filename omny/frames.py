@@ -518,12 +518,43 @@ class FrameLoader:
         for ch in sections.get("Characteristics", []):
             p.is_a.append(self._resolve_characteristic(ch))
         for inv in sections.get("InverseOf", []):
-            p.inverse_property = self.r.get_object_property(inv)
+            inner = self._inverse_target(inv)
+            if inner is None:
+                p.inverse_property = self.r.get_object_property(inv)
+            else:
+                # ``InverseOf: inverse (Q)`` is a valid but vanishingly rare
+                # form (absent from SIO/RO/SULO) that entails ``p ≡ Q``.
+                # owlready2 cannot store an ``Inverse(...)`` as
+                # ``inverse_property``, so warn and keep the rest of the frame
+                # rather than letting the ValueError skip the whole frame.
+                warnings.warn(
+                    f"InverseOf: 'inverse {inner}' on {subject!r} not "
+                    "represented (owlready2 has no inverse_property = "
+                    "Inverse(...) form); rest of frame preserved.",
+                    stacklevel=2,
+                )
         for sup in sections.get("SubPropertyOf", []):
-            p.is_a.append(self.r.get_object_property(sup))
+            p.is_a.append(self._resolve_object_property_expr(sup))
         for chain in sections.get("SubPropertyChain", []):
             self._assert_property_chain(p, chain)
         self._apply_annotations(p, sections.get("Annotations", []))
+
+    def _resolve_object_property_expr(self, token: str):
+        """Resolve an ``objectPropertyExpression`` operand to an owlready2 value.
+
+        A named property resolves to the property entity; an ``inverse (P)``
+        expression (OWL 2 ``ObjectInverseOf``) resolves to
+        ``owlready2.Inverse(P)``. Used by ``SubPropertyOf:``, where RO emits
+        e.g. ``SubPropertyOf: inverse (RO_0002376)`` — previously the literal
+        string was handed to the CURIE resolver, raising ``Unknown prefix
+        'inverse (obo'`` and dropping the whole ``ObjectProperty:`` frame
+        (issue #68). owlready2 stores ``is_a.append(Inverse(Q))`` as
+        ``p rdfs:subPropertyOf [ owl:inverseOf Q ]``.
+        """
+        inner = self._inverse_target(token)
+        if inner is not None:
+            return owlready2.Inverse(self.r.get_object_property(inner))
+        return self.r.get_object_property(token)
 
     def _assert_property_chain(self, prop, chain: str) -> None:
         """Assert ``SubObjectPropertyOf(ObjectPropertyChain(...), prop)``.

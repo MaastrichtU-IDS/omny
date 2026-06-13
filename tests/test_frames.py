@@ -348,6 +348,84 @@ def test_subpropertychain_with_inverse_link():
     assert chain2[0].property.iri == "http://ex.org/a"
 
 
+def test_subpropertyof_inverse_expression():
+    """Issue #68: ``SubPropertyOf: inverse (P)`` is a valid objectPropertyExpression
+    (OWL 2 ObjectInverseOf). Previously the literal ``inverse (P)`` string was
+    handed to the CURIE resolver, raising ``Unknown prefix`` and dropping the
+    whole ObjectProperty frame (along with its other axioms). It is now parsed
+    as ``Inverse(P)`` (RDF: ``p rdfs:subPropertyOf [ owl:inverseOf P ]``) and
+    round-trips to ``inverse <name>``.
+    """
+    from omny import render
+    doc = """
+    Prefix: : <http://ex.org/>
+    ObjectProperty: :p
+    ObjectProperty: :q
+    ObjectProperty: :r
+        SubPropertyOf: :q, inverse (:p)
+    """
+    import warnings
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        onto = parse(doc)
+    r = onto.world["http://ex.org/r"]
+    assert r is not None
+    # one named super (q) and one inverse super (inverse p)
+    named = [s for s in r.is_a if getattr(s, "iri", None) == "http://ex.org/q"]
+    inv = [s for s in r.is_a if isinstance(s, owlready2.Inverse)]
+    assert named and len(inv) == 1
+    assert inv[0].property.iri == "http://ex.org/p"
+    out = render(onto, prefixes={"": "http://ex.org/"})
+    sub_lines = [ln.strip() for ln in out.splitlines() if "SubPropertyOf" in ln]
+    assert sub_lines == ["SubPropertyOf: :q, inverse :p"]
+    # survives a parse/render cycle
+    r2 = parse(out).world["http://ex.org/r"]
+    assert [s.property.iri for s in r2.is_a if isinstance(s, owlready2.Inverse)] == [
+        "http://ex.org/p"
+    ]
+
+
+def test_subpropertyof_inverse_does_not_drop_rest_of_frame():
+    """The inverse operand must not skip the rest of the frame (the original
+    #68 symptom: the whole frame — including unrelated axioms — was lost)."""
+    doc = """
+    Prefix: : <http://ex.org/>
+    ObjectProperty: :p
+    ObjectProperty: :r
+        Domain: :C
+        SubPropertyOf: inverse (:p)
+        Range: :D
+    """
+    import warnings
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        onto = parse(doc)
+    r = onto.world["http://ex.org/r"]
+    assert onto.world["http://ex.org/C"] in r.domain
+    assert onto.world["http://ex.org/D"] in r.range
+
+
+def test_inverseof_inverse_expression_warns_keeps_frame():
+    """``InverseOf: inverse (Q)`` is valid but has no owlready2 representation
+    (``inverse_property`` cannot hold an ``Inverse``); rather than dropping the
+    frame, it warns and preserves the rest of the frame."""
+    import warnings
+    doc = """
+    Prefix: : <http://ex.org/>
+    ObjectProperty: :q
+    ObjectProperty: :p
+        Domain: :C
+        InverseOf: inverse (:q)
+    """
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        onto = parse(doc)
+    p = onto.world["http://ex.org/p"]
+    assert p is not None
+    assert onto.world["http://ex.org/C"] in p.domain  # rest of frame preserved
+    assert any("InverseOf" in str(w.message) for w in caught)
+
+
 def test_disjoint_union_of():
     """``DisjointUnionOf: A, B, C`` on a class records the OWL 2 semantics:
     the class is EquivalentTo the union of the members, and the members are

@@ -6,6 +6,19 @@ All notable changes to this project will be documented in this file.
 
 ### Fixed
 
+* **`inverse (P)` object-property expressions accepted outside property
+  chains** (issue #68). A `SubPropertyOf:` operand of the form
+  `inverse (P)` (OWL 2 `ObjectInverseOf`, used by RO, e.g.
+  `SubPropertyOf: inverse (RO_0002376)`) was passed straight to the CURIE
+  resolver, which raised `Unknown prefix 'inverse (obo'` and **dropped the
+  whole `ObjectProperty:` frame** (taking its other axioms with it). The
+  `SubPropertyOf:` operand resolver now recognises `inverse (P)` and records
+  it as `is_a.append(Inverse(P))` (RDF: `p rdfs:subPropertyOf
+  [ owl:inverseOf P ]`); it round-trips to `inverse <name>` on render. The
+  rare `InverseOf: inverse (Q)` form (no owlready2 `inverse_property =
+  Inverse(...)` representation; absent from SIO/RO/SULO) now warns and
+  preserves the rest of the frame instead of dropping it.
+
 * **Manchester reader no longer silently drops valid OWL 2 constructs**
   (issue #66). Two valid Manchester Syntax forms — accepted by the OWL
   API / ROBOT — were emitting a `UserWarning` and discarding the
