@@ -224,12 +224,35 @@ class FrameLoader:
         # malformed entity IRIs (see PR #26 bridge sanitiser for the
         # downstream pyoxigraph failure that surfaced this).
         candidates = list(_finditer_outside_strings(_CANDIDATE_KW_RE, body, mask))
-        for i, m in enumerate(candidates):
+
+        # Filter out *inline* ``Annotations:`` keywords — an axiom/nested
+        # annotation (OWL 2 ``[annotations] operand``) rather than a new frame
+        # clause. Per the Manchester grammar an annotated-list entry is
+        # ``[annotations] operand``, so an ``Annotations:`` that sits in operand
+        # position — directly after a section keyword (nothing but whitespace
+        # before it) or right after a top-level comma — annotates the following
+        # operand and must NOT terminate the enclosing section. Treating it as
+        # a boundary made the real operand bleed into a phantom Annotations
+        # section, silently dropping e.g. RO's ``SubPropertyChain: Annotations:
+        # … obo:RO_0002371 o obo:BFO_0000050`` (see #67). The annotation prefix
+        # itself is stripped per-operand below (the axiom annotation is not yet
+        # retained — parity with prior behaviour, minus the data loss).
+        real = []
+        for m in candidates:
+            if m.group(1) == "Annotations" and real:
+                preceding = body[real[-1].end(): m.start()].rstrip()
+                if preceding == "" or preceding.endswith(","):
+                    continue
+            real.append(m)
+
+        for i, m in enumerate(real):
             keyword = m.group(1)
-            end = candidates[i + 1].start() if i + 1 < len(candidates) else len(body)
+            end = real[i + 1].start() if i + 1 < len(real) else len(body)
             if keyword in _AXIOM_KEYWORDS:
                 block = body[m.end(): end].strip()
-                operands = self._split_commas(block)
+                operands = [self._strip_leading_annotation(op)
+                            for op in self._split_commas(block)]
+                operands = [op for op in operands if op]
                 if operands:
                     # Repeated axiom keywords inside a frame are concatenated, not
                     # overwritten — e.g. two ``SubClassOf:`` lines on the same Class
@@ -238,7 +261,7 @@ class FrameLoader:
 
         # Warn about unknown keyword-like lines (their content is now correctly
         # dropped rather than bleeding into the preceding known section).
-        for m in candidates:
+        for m in real:
             kw = m.group(1)
             if kw not in _ALL_KNOWN_KEYWORDS:
                 warnings.warn(
@@ -249,6 +272,55 @@ class FrameLoader:
                 )
 
         return sections
+
+    @staticmethod
+    def _consume_annotation_value(text: str) -> Optional[int]:
+        """Return the number of chars spanning one annotation value at the start
+        of *text* (a quoted literal with optional ``^^datatype``/``@lang``, a
+        ``<IRI>``, or a bare token), or ``None`` if it can't be parsed."""
+        if not text:
+            return None
+        if text[0] == '"':
+            m = _STRING_LITERAL_RE.match(text)
+            if not m:
+                return None
+            end = m.end()
+            suffix = re.match(r"\^\^\S+|@\S+", text[end:])
+            return end + (suffix.end() if suffix else 0)
+        if text[0] == "<":
+            gt = text.find(">")
+            return gt + 1 if gt != -1 else None
+        m = re.match(r"\S+", text)
+        return m.end() if m else None
+
+    def _strip_leading_annotation(self, operand: str) -> str:
+        """Strip a leading OWL 2 axiom/nested ``Annotations: annProp annValue``
+        prefix from a single operand, returning just the operand text.
+
+        After :meth:`_split_commas`, each operand carries at most one leading
+        annotation entry (additional comma-separated entries split into their
+        own operands), so a single annotation entry — ``annProp`` then one
+        ``annValue`` — is parsed and discarded. If the prefix can't be parsed
+        cleanly the operand is returned unchanged (never lose data on a form
+        we don't recognise). Multi-entry inline annotations
+        (``Annotations: p1 v1, p2 v2 operand``) are not split apart here and
+        fall through unchanged — rare and absent from the OBO corpus.
+        """
+        s = operand.strip()
+        while s.startswith("Annotations:"):
+            rest = s[len("Annotations:"):].lstrip()
+            mprop = re.match(r"\S+", rest)
+            if not mprop:
+                return s
+            after_prop = rest[mprop.end():].lstrip()
+            consumed = self._consume_annotation_value(after_prop)
+            if consumed is None:
+                return s
+            remainder = after_prop[consumed:].strip()
+            if not remainder:
+                return ""
+            s = remainder
+        return s
 
     @staticmethod
     def _split_commas(text: str) -> List[str]:

@@ -313,6 +313,90 @@ def test_subpropertychain_three_links_roundtrip():
     assert "SubPropertyChain: :a o :b o :c" in out
 
 
+def test_axiom_annotation_on_subpropertychain_not_dropped():
+    """Issue #67: an inline ``Annotations:`` before an axiom operand must not
+    be treated as a frame clause that swallows the operand. RO emits annotated
+    chains (``is_inferred``/GCI markers); the chain must still be parsed (the
+    axiom annotation itself is discarded for now)."""
+    doc = """
+    Prefix: : <http://ex.org/>
+    Prefix: obo: <http://purl.obolibrary.org/obo/>
+    ObjectProperty: obo:RO_0002582
+    ObjectProperty: obo:RO_0002371
+    ObjectProperty: obo:BFO_0000050
+    ObjectProperty: obo:RO_0002177
+        SubPropertyChain:
+            Annotations: obo:RO_0002582 true
+            obo:RO_0002371 o obo:BFO_0000050
+    """
+    onto = parse(doc)
+    p = onto.world["http://purl.obolibrary.org/obo/RO_0002177"]
+    chains = [[link.iri for link in c.properties] for c in p.property_chain]
+    assert chains == [[
+        "http://purl.obolibrary.org/obo/RO_0002371",
+        "http://purl.obolibrary.org/obo/BFO_0000050",
+    ]]
+
+
+def test_axiom_annotation_on_subclassof_not_dropped():
+    """An inline ``Annotations:`` before a ``SubClassOf:`` operand (quoted
+    annotation value) must leave the named superclass intact."""
+    doc = """
+    Prefix: : <http://ex.org/>
+    Class: B
+    Class: A
+        SubClassOf:
+            Annotations: rdfs:comment "asserted, with a comma"
+            B
+    """
+    onto = parse(doc)
+    A = onto.world["http://ex.org/A"]
+    assert onto.world["http://ex.org/B"] in A.is_a
+
+
+def test_axiom_annotation_on_domain_comma_list():
+    """An annotated first operand in a comma-separated list (RO ``Domain:``
+    pattern) keeps both operands; the annotation prefix is stripped only from
+    the entry it precedes."""
+    doc = """
+    Prefix: : <http://ex.org/>
+    ObjectProperty: :p
+        Domain:
+            Annotations: rdfs:comment "redundant axiom"
+            :C,
+            :D
+    """
+    onto = parse(doc)
+    p = onto.world["http://ex.org/p"]
+    domain_iris = {d.iri for d in p.domain if hasattr(d, "iri")}
+    assert domain_iris == {"http://ex.org/C", "http://ex.org/D"}
+
+
+def test_annotation_on_annotation_preserves_real_annotations():
+    """A nested ``Annotations:`` inside a frame ``Annotations:`` list (an
+    annotation-on-annotation) is dropped without corrupting the sibling
+    annotation entries."""
+    doc = """
+    Prefix: : <http://ex.org/>
+    Prefix: oboInOwl: <http://www.geneontology.org/formats/oboInOwl#>
+    AnnotationProperty: oboInOwl:hasDbXref
+    ObjectProperty: :p
+        Annotations:
+            oboInOwl:created_by <https://orcid.org/x>,
+
+                Annotations: oboInOwl:hasDbXref <https://orcid.org/y>
+            rdfs:comment "the real comment",
+            rdfs:label "the label"
+    """
+    import warnings
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        onto = parse(doc)
+    p = onto.world["http://ex.org/p"]
+    assert p.comment == ["the real comment"]
+    assert p.label == ["the label"]
+
+
 def test_subpropertychain_with_inverse_link():
     """A chain link may be an ``inverse (P)`` expression (heavily used by RO,
     e.g. ``inverse (RO_0002176) o RO_0002176``). The inverse link has no
