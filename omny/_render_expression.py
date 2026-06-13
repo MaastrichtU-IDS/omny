@@ -146,4 +146,7 @@ def _render_value_filler(value, p: Dict[str, str]) -> str:
     """`value` clause filler may be an individual (entity) or a literal."""
     if hasattr(value, "iri"):
         return _name(value, p)
+    if isinstance(value, owlready2.locstr):
+        escaped = _escape_str(str(value))
+        return f'"{escaped}"@{value.lang}' if value.lang else f'"{escaped}"'
     return _render_literal(value)

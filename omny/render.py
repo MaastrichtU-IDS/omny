@@ -324,6 +324,9 @@ def render_frame(entity, prefixes: Optional[Dict[str, str]] = None,
         sups = _user_super_properties(entity)
         if sups:
             out += _kw_line("SubPropertyOf", sups, p)
+        for chain in getattr(entity, "property_chain", []) or []:
+            links = " o ".join(_name(link, p) for link in chain.properties)
+            out += f"    SubPropertyChain: {links}\n"
         if entity.inverse_property is not None:
             out += f"    InverseOf: {_name(entity.inverse_property, p)}\n"
         return out

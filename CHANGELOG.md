@@ -2,6 +2,27 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Fixed
+
+* **Manchester reader no longer silently drops valid OWL 2 constructs**
+  (issue #66). Two valid Manchester Syntax forms — accepted by the OWL
+  API / ROBOT — were emitting a `UserWarning` and discarding the
+  axiom/frame instead of parsing it:
+  * **Typed/lang literals in `Facts:`** — a datatype literal such as
+    `:hasBirthYear "1868"^^xsd:integer` was mis-tokenised by splitting on
+    the last `:` (treating `"1868"^^xsd` as a CURIE prefix), which raised
+    `Unknown prefix` and dropped the **entire `Individual:` frame**. The
+    Facts value parser now recognises the three quoted-literal forms —
+    plain `"…"`, typed `"…"^^datatypeIRI`, and language-tagged `"…"@lang`
+    — splitting the `^^`/`@` separator after the closing quote. Lang tags
+    are preserved as `locstr` and round-trip through `render`.
+  * **`SubPropertyChain:`** — the standard object-property frame keyword
+    was unrecognised and its axiom dropped. It is now parsed into a
+    `SubObjectPropertyOf(ObjectPropertyChain(...), prop)` (owlready2
+    `property_chain`) and rendered back out.
+
 ## [0.2.2] — 2026-06-03
 
 ### Fixed

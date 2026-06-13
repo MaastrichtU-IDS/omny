@@ -219,6 +219,101 @@ def test_facts_non_functional_still_works():
     assert names == {"alice", "carol"}
 
 
+def test_facts_typed_literal_not_dropped():
+    """Issue #66 bug 1: a typed literal ``"1868"^^xsd:integer`` in a Facts
+    clause must be parsed as a data-property assertion, not mis-tokenised
+    as a CURIE (which dropped the whole Individual frame with a warning).
+    """
+    doc = """
+    Prefix: : <http://ex.org/>
+    Prefix: xsd: <http://www.w3.org/2001/XMLSchema#>
+    DataProperty: :hasBirthYear
+    Individual: :alice
+        Facts: :hasBirthYear "1868"^^xsd:integer
+    """
+    import warnings
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")  # any UserWarning -> failure
+        onto = parse(doc)
+    alice = onto.world["http://ex.org/alice"]
+    assert alice is not None
+    assert alice.hasBirthYear == [1868]
+    assert isinstance(alice.hasBirthYear[0], int)
+
+
+def test_facts_typed_literal_string_decimal_boolean():
+    """Other typed-literal datatypes coerce to the right Python value."""
+    doc = """
+    Prefix: : <http://ex.org/>
+    Prefix: xsd: <http://www.w3.org/2001/XMLSchema#>
+    DataProperty: :s
+    DataProperty: :d
+    DataProperty: :b
+    Individual: :x
+        Facts: :s "hi"^^xsd:string, :d "3.5"^^xsd:decimal, :b "true"^^xsd:boolean
+    """
+    onto = parse(doc)
+    x = onto.world["http://ex.org/x"]
+    assert x.s == ["hi"]
+    assert x.d == [3.5]
+    assert x.b == [True]
+
+
+def test_facts_lang_tagged_literal():
+    """A language-tagged literal ``"hej"@sv`` in Facts is preserved as a
+    locstr with its language tag (round-trips through render)."""
+    doc = """
+    Prefix: : <http://ex.org/>
+    DataProperty: :label
+    Individual: :x
+        Facts: :label "hej"@sv
+    """
+    onto = parse(doc)
+    x = onto.world["http://ex.org/x"]
+    assert str(x.label[0]) == "hej"
+    assert x.label[0].lang == "sv"
+
+
+def test_subpropertychain_parsed():
+    """Issue #66 bug 2: ``SubPropertyChain: :p o :q`` on ObjectProperty :r
+    yields a property chain (:p o :q) on :r, not an unknown-keyword warning.
+    """
+    doc = """
+    Prefix: : <http://ex.org/>
+    ObjectProperty: :p
+    ObjectProperty: :q
+    ObjectProperty: :r
+        SubPropertyChain: :p o :q
+    """
+    import warnings
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        onto = parse(doc)
+    r = onto.world["http://ex.org/r"]
+    assert r is not None
+    chains = [[link.iri for link in c.properties] for c in r.property_chain]
+    assert chains == [["http://ex.org/p", "http://ex.org/q"]]
+
+
+def test_subpropertychain_three_links_roundtrip():
+    """A longer chain renders back to a ``SubPropertyChain:`` line."""
+    from omny import render
+    doc = """
+    Prefix: : <http://ex.org/>
+    ObjectProperty: :a
+    ObjectProperty: :b
+    ObjectProperty: :c
+    ObjectProperty: :r
+        SubPropertyChain: :a o :b o :c
+    """
+    onto = parse(doc)
+    r = onto.world["http://ex.org/r"]
+    chains = [[link.iri for link in c.properties] for c in r.property_chain]
+    assert chains == [["http://ex.org/a", "http://ex.org/b", "http://ex.org/c"]]
+    out = render(onto, prefixes={"": "http://ex.org/"})
+    assert "SubPropertyChain: :a o :b o :c" in out
+
+
 # FIX 1 tests
 
 def test_custom_annotation_property():
@@ -496,19 +591,22 @@ def test_round_trip_does_not_duplicate_annotations():
     assert r2.count("comment") <= r1.count("comment") * 2  # nothing exponential
 
 
-def test_unknown_axiom_keyword_does_not_leak_into_previous_section():
-    """Regression: an unsupported axiom keyword (e.g. ``SubPropertyChain:``)
-    inside a frame body must terminate the preceding known section, not
-    silently extend it.
+def test_axiom_keyword_does_not_leak_into_previous_section():
+    """Regression: an axiom keyword inside a frame body must terminate the
+    preceding section, not silently extend it.
 
-    Pre-fix, ``_split_sections`` only used known section matches as
-    boundaries. Unknown keyword text was concatenated into the prior known
-    operand list. With sio.omn, the ``SubPropertyOf:`` operand became a
+    Pre-fix, ``_split_sections`` only used *known* section matches as
+    boundaries, so a keyword that wasn't yet recognised concatenated into the
+    prior operand list. With sio.omn, the ``SubPropertyOf:`` operand became a
     multi-line ``sio:SIO_000322\\n    SubPropertyChain:\\n        sio:...``
     string, which was then handed to ``get_object_property`` and turned
     into a malformed entity IRI containing literal newlines + Manchester
     text. owlready2's N-Triples writer faithfully serialised that IRI,
     and pyoxigraph rejected the load.
+
+    ``SubPropertyChain:`` is now a recognised keyword (issue #66), so this
+    also asserts the chain itself is parsed; the leak-prevention is still
+    exercised via the ``SubPropertyOf:``/``Characteristics:`` boundaries.
     """
     doc = """
     Prefix: : <http://ex.org/>
@@ -520,8 +618,7 @@ def test_unknown_axiom_keyword_does_not_leak_into_previous_section():
     Class: A
     Class: B
     """
-    with pytest.warns(UserWarning, match="SubPropertyChain"):
-        onto = parse(doc)
+    onto = parse(doc)
     p1 = onto.world["http://ex.org/p1"]
     q1 = onto.world["http://ex.org/q1"]
     assert p1 is not None and q1 is not None
@@ -536,6 +633,9 @@ def test_unknown_axiom_keyword_does_not_leak_into_previous_section():
     for e in list(onto.classes()) + list(onto.object_properties()):
         assert "\n" not in e.iri
         assert "SubPropertyChain" not in e.iri
-    # Characteristics: section still parsed correctly (unknown keyword did not
-    # consume it).
+    # Characteristics: section still parsed correctly (the chain keyword did
+    # not consume it).
     assert owlready2.SymmetricProperty in p1.is_a
+    # SubPropertyChain: parsed into a property chain of :a o :b.
+    chains = [[link.iri for link in c.properties] for c in p1.property_chain]
+    assert chains == [["http://ex.org/a", "http://ex.org/b"]]

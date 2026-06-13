@@ -1,4 +1,5 @@
 """Manchester document/frame loader: populates an owlready2 ontology."""
+import re
 import warnings
 from typing import Dict, List, Optional, Tuple
 
@@ -15,9 +16,11 @@ from omny._frame_tokeniser import (
     _MISC_KEYWORDS,
     _ONTOLOGY_RE,
     _PREFIX_RE,
+    _STRING_LITERAL_RE,
 )
 from omny.entities import EntityResolver
 from omny._lark_parser import LarkManchesterParser as ManchesterParser
+from omny._lark_parser import _datatype_to_python_type
 
 
 def parse(text: str, onto: Optional[owlready2.Ontology] = None,
@@ -497,7 +500,32 @@ class FrameLoader:
             p.inverse_property = self.r.get_object_property(inv)
         for sup in sections.get("SubPropertyOf", []):
             p.is_a.append(self.r.get_object_property(sup))
+        for chain in sections.get("SubPropertyChain", []):
+            self._assert_property_chain(p, chain)
         self._apply_annotations(p, sections.get("Annotations", []))
+
+    def _assert_property_chain(self, prop, chain: str) -> None:
+        """Assert ``SubObjectPropertyOf(ObjectPropertyChain(...), prop)``.
+
+        The Manchester ``SubPropertyChain:`` operand is a chain of object
+        properties separated by `` o `` (e.g. ``partOf o partOf``). The chain
+        is the *sub* property of the frame's property — a common OBO
+        construct (RO/GO role chains). owlready2 models this on the
+        super-property via ``prop.property_chain.append(PropertyChain([...]))``.
+        """
+        links = [self.r.get_object_property(name)
+                 for name in self._split_chain(chain)]
+        if links:
+            prop.property_chain.append(owlready2.PropertyChain(links))
+
+    @staticmethod
+    def _split_chain(chain: str) -> List[str]:
+        """Split a property chain on the `` o `` composition operator.
+
+        Splits on whitespace-delimited ``o`` only, so it does not break
+        property names that merely contain the letter (e.g. ``hasParto``).
+        """
+        return [tok for tok in re.split(r"\s+o\s+", chain.strip()) if tok]
 
     def _handle_data_property(self, subject: str, sections: dict) -> None:
         p = self.r.get_data_property(subject)
@@ -546,9 +574,12 @@ class FrameLoader:
         self._append_property_value(ind, prop, value)
 
     def _literal_or_individual(self, raw: str):
-        """Parse a fact value: quoted string, boolean, int, float, or individual name."""
-        if raw.startswith('"') and raw.endswith('"'):
-            return raw[1:-1]
+        """Parse a fact value: a quoted literal (plain ``"..."``, typed
+        ``"..."^^datatype``, or language-tagged ``"..."@lang``), a bare
+        boolean/int/float, or an individual name.
+        """
+        if raw.startswith('"'):
+            return self._parse_quoted_literal(raw)
         if raw.lower() in ("true", "false"):
             return raw.lower() == "true"
         try:
@@ -560,6 +591,40 @@ class FrameLoader:
         except ValueError:
             pass
         return self.r.get_individual(raw)
+
+    @staticmethod
+    def _parse_quoted_literal(raw: str):
+        """Parse a quoted Manchester literal into a Python value.
+
+        Handles the three OWL 2 literal forms whose value side is a quoted
+        string: plain ``"lexical"``, typed ``"lexical"^^datatypeIRI``, and
+        language-tagged ``"lexical"@lang``.
+
+        The ``^^`` / ``@`` separator must be located *after* the closing
+        quote of the lexical form. Previously a typed literal flowed into the
+        individual-name path, whose CURIE resolver split on the **last** ``:``
+        — turning ``"1868"^^xsd:integer`` into prefix ``"1868"^^xsd`` /
+        local ``integer`` and raising ``Unknown prefix``, which dropped the
+        entire ``Individual:`` frame (issue #66).
+        """
+        from omny.parser import unescape_quoted_string
+        m = _STRING_LITERAL_RE.match(raw)
+        if m is None:
+            # No well-formed closing quote; treat the whole thing as a string.
+            return raw[1:-1] if len(raw) >= 2 and raw.endswith('"') else raw
+        lexical = unescape_quoted_string(m.group(0)[1:-1])
+        suffix = raw[m.end():].strip()
+        if suffix.startswith("^^"):
+            datatype = suffix[2:].strip()
+            py_type = _datatype_to_python_type(datatype)
+            if py_type is bool:
+                return lexical.strip().lower() == "true"
+            if py_type in (int, float):
+                return py_type(lexical)
+            return lexical
+        if suffix.startswith("@"):
+            return owlready2.locstr(lexical, suffix[1:].strip())
+        return lexical
 
     def _assert_same_as(self, a, b) -> None:
         """Assert owl:sameAs(a, b) via a low-level triple insert."""
