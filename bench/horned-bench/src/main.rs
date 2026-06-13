@@ -115,6 +115,16 @@ fn main() {
                 let _ = horned_owl::io::rdf::writer::write(Vec::<u8>::new(), &amo).expect("rdf write");
             })
         }
+        // fastobo's horned-manchester crate (built on horned-owl 0.14) — parse only;
+        // it ships no serializer, so the render arm is intentionally unsupported.
+        ("fastobo-omn", "parse") => time_it(warmup, hot, || {
+            let (o, _): (horned_owl_014::ontology::set::SetOntology<Rc<str>>, _) =
+                horned_manchester::from_str(&text).expect("fastobo parse");
+            component_count = o.iter().count();
+        }),
+        ("fastobo-omn", "render") => {
+            panic!("fastobo-omn render: horned-manchester ships no serializer (read-only comparator)")
+        }
         other => panic!("unsupported (format,mode) = {other:?}"),
     };
 
