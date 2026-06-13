@@ -89,6 +89,27 @@ def _build_disjoint_map(onto) -> Dict[str, list]:
     return m
 
 
+def _build_disjoint_property_map(onto) -> Dict[str, list]:
+    """One-pass scan of ``onto.disjoint_properties()`` → ``{prop.iri: [partners]}``.
+
+    The object/data-property analogue of :func:`_build_disjoint_map`. A
+    partner may be an ``Inverse(...)`` expression (no ``.iri``), so only named
+    properties are used as map *keys*, while partners are kept as-is (rendered
+    via :func:`_name`, which prints ``inverse <name>``).
+    """
+    m: Dict[str, list] = {}
+    for d in onto.disjoint_properties():
+        ents = list(d.entities)
+        for e1 in ents:
+            if not hasattr(e1, "iri"):
+                continue
+            partners = m.setdefault(e1.iri, [])
+            for e2 in ents:
+                if e2 is not e1 and e2 not in partners:
+                    partners.append(e2)
+    return m
+
+
 def _find_disjoint_partners(cls, disjoint_map: Optional[Dict[str, list]] = None) -> list:
     """Return classes appearing in any AllDisjoint group together with `cls`.
 
@@ -283,13 +304,15 @@ def _individual_different_partners(ind) -> list:
 
 def render_frame(entity, prefixes: Optional[Dict[str, str]] = None,
                  *, _disjoint_map: Optional[Dict[str, list]] = None,
+                 _disjoint_prop_map: Optional[Dict[str, list]] = None,
                  _annotation_map: Optional[Dict[str, list]] = None) -> str:
     """Render one owlready2 entity to its Manchester frame text.
 
-    ``_disjoint_map`` and ``_annotation_map`` are internal optimisation
-    kwargs passed by :func:`render` so we avoid re-scanning disjoint
-    groups and re-probing every annotation property per entity.
-    Standalone callers should leave them ``None``.
+    ``_disjoint_map``, ``_disjoint_prop_map`` and ``_annotation_map`` are
+    internal optimisation kwargs passed by :func:`render` so we avoid
+    re-scanning disjoint groups (classes / properties respectively) and
+    re-probing every annotation property per entity. Standalone callers
+    should leave them ``None``.
     """
     p = dict(prefixes or {})
     iri = getattr(entity, "iri", None)
@@ -327,6 +350,9 @@ def render_frame(entity, prefixes: Optional[Dict[str, str]] = None,
         for chain in getattr(entity, "property_chain", []) or []:
             links = " o ".join(_name(link, p) for link in chain.properties)
             out += f"    SubPropertyChain: {links}\n"
+        out += _kw_line("EquivalentTo", list(entity.equivalent_to), p)
+        out += _kw_line("DisjointWith",
+                        _find_disjoint_partners(entity, _disjoint_prop_map), p)
         if entity.inverse_property is not None:
             out += f"    InverseOf: {_name(entity.inverse_property, p)}\n"
         return out
@@ -342,6 +368,9 @@ def render_frame(entity, prefixes: Optional[Dict[str, str]] = None,
         sups = _user_super_properties(entity)
         if sups:
             out += _kw_line("SubPropertyOf", sups, p)
+        out += _kw_line("EquivalentTo", list(entity.equivalent_to), p)
+        out += _kw_line("DisjointWith",
+                        _find_disjoint_partners(entity, _disjoint_prop_map), p)
         return out
 
     if isinstance(entity, owlready2.Thing):  # individuals
@@ -413,12 +442,15 @@ def render(onto, prefixes: Optional[Dict[str, str]] = None,
     # (was 97 % of HP render wall pre-fix — 9 M getattr probes for empty
     # annotations).  One rdflib triples() scan per annotation property.
     annotation_map = _build_annotation_map(onto, p)
+    disjoint_prop_map = _build_disjoint_property_map(onto)
     for ap in sorted(onto.world.annotation_properties(), key=lambda e: e.iri):
         parts.append(render_frame(ap, p, _annotation_map=annotation_map))
     for op in sorted(onto.object_properties(), key=lambda e: e.iri):
-        parts.append(render_frame(op, p, _annotation_map=annotation_map))
+        parts.append(render_frame(op, p, _annotation_map=annotation_map,
+                                  _disjoint_prop_map=disjoint_prop_map))
     for dp in sorted(onto.data_properties(), key=lambda e: e.iri):
-        parts.append(render_frame(dp, p, _annotation_map=annotation_map))
+        parts.append(render_frame(dp, p, _annotation_map=annotation_map,
+                                  _disjoint_prop_map=disjoint_prop_map))
     # Skip classes whose IRI was declared as a Datatype (avoid duplicate frames).
     datatype_set = set(datatype_iris)
     # Precompute the {class_iri: [partners]} map once (was 80% of render

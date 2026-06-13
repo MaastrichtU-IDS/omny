@@ -6,6 +6,18 @@ All notable changes to this project will be documented in this file.
 
 ### Fixed
 
+* **Object/data-property frame `EquivalentTo:` and `DisjointWith:` are
+  parsed and rendered** (issue #71). Both clauses were recognised keywords
+  (so no warning) but `_handle_object_property`/`_handle_data_property`
+  never read them, so their operands were silently dropped; `render` also
+  never emitted them. They are now parsed — `EquivalentTo:` →
+  `equivalent_to`, `DisjointWith:` → `AllDisjoint` — for both object and
+  data properties (object-property operands may be `inverse (P)`,
+  reusing the #68 resolver), and emitted on render (a property-disjoint map
+  analogous to the class one) so they round-trip. (Note: this is the
+  per-frame clause; the document-level `EquivalentProperties:` /
+  `DisjointProperties:` misc axioms were already handled.)
+
 * **Axiom-level (inline) `Annotations:` no longer swallow the annotated
   operand** (issue #67). Per the OWL 2 Manchester grammar an annotated-list
   entry is `[annotations] operand`, so an `Annotations:` block may sit in

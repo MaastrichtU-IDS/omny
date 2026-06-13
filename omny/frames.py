@@ -609,7 +609,21 @@ class FrameLoader:
             p.is_a.append(self._resolve_object_property_expr(sup))
         for chain in sections.get("SubPropertyChain", []):
             self._assert_property_chain(p, chain)
+        for eq in sections.get("EquivalentTo", []):
+            p.equivalent_to.append(self._resolve_object_property_expr(eq))
+        self._assert_property_disjoint(
+            p, [self._resolve_object_property_expr(x)
+                for x in sections.get("DisjointWith", [])])
         self._apply_annotations(p, sections.get("Annotations", []))
+
+    def _assert_property_disjoint(self, prop, partners: list) -> None:
+        """Assert ``DisjointProperties(prop, *partners)`` from a frame-level
+        ``DisjointWith:`` clause. owlready2 models property disjointness with
+        ``AllDisjoint`` (the same construct as classes); partners may be named
+        properties or ``Inverse(...)`` expressions."""
+        if partners:
+            with self.r.onto:
+                owlready2.AllDisjoint([prop, *partners])
 
     def _resolve_object_property_expr(self, token: str):
         """Resolve an ``objectPropertyExpression`` operand to an owlready2 value.
@@ -724,6 +738,11 @@ class FrameLoader:
             p.is_a.append(self._resolve_characteristic(ch))
         for sup in sections.get("SubPropertyOf", []):
             p.is_a.append(self.r.get_data_property(sup))
+        for eq in sections.get("EquivalentTo", []):
+            p.equivalent_to.append(self.r.get_data_property(eq))
+        self._assert_property_disjoint(
+            p, [self.r.get_data_property(x)
+                for x in sections.get("DisjointWith", [])])
         self._apply_annotations(p, sections.get("Annotations", []))
 
     def _handle_individual(self, subject: str, sections: dict) -> None:
