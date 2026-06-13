@@ -314,6 +314,71 @@ def test_subpropertychain_three_links_roundtrip():
     assert "SubPropertyChain: :a o :b o :c" in out
 
 
+def test_subpropertychain_with_inverse_link():
+    """A chain link may be an ``inverse (P)`` expression (heavily used by RO,
+    e.g. ``inverse (RO_0002176) o RO_0002176``). The inverse link has no
+    storid for owlready2's high-level PropertyChain API, so it is written as
+    RDF and reads back as an ``Inverse(...)`` link — round-tripping to
+    ``inverse <name>`` on render.
+    """
+    from omny import render
+    doc = """
+    Prefix: : <http://ex.org/>
+    ObjectProperty: :a
+    ObjectProperty: :b
+    ObjectProperty: :r
+        SubPropertyChain: inverse (:a) o :b
+    """
+    import warnings
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        onto = parse(doc)
+    r = onto.world["http://ex.org/r"]
+    chain = r.property_chain[0].properties
+    assert isinstance(chain[0], owlready2.Inverse)
+    assert chain[0].property.iri == "http://ex.org/a"
+    assert chain[1].iri == "http://ex.org/b"
+    out = render(onto, prefixes={"": "http://ex.org/"})
+    chain_lines = [l.strip() for l in out.splitlines() if "SubPropertyChain" in l]
+    assert chain_lines == ["SubPropertyChain: inverse :a o :b"]
+    # Re-parse the rendered form to confirm the inverse link survives a cycle.
+    onto2 = parse(out)
+    r2 = onto2.world["http://ex.org/r"]
+    chain2 = r2.property_chain[0].properties
+    assert isinstance(chain2[0], owlready2.Inverse)
+    assert chain2[0].property.iri == "http://ex.org/a"
+
+
+def test_disjoint_union_of():
+    """``DisjointUnionOf: A, B, C`` on a class records the OWL 2 semantics:
+    the class is EquivalentTo the union of the members, and the members are
+    pairwise disjoint (used by SULO). owlready2 has no native disjoint-union,
+    so it is expanded the way the OWL API itself does.
+    """
+    doc = """
+    Prefix: : <http://ex.org/>
+    Class: A
+    Class: B
+    Class: C
+    Class: X
+        DisjointUnionOf: A, B, C
+    """
+    import warnings
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        onto = parse(doc)
+    X = onto.world["http://ex.org/X"]
+    # EquivalentTo (A or B or C)
+    unions = [e for e in X.equivalent_to if isinstance(e, owlready2.Or)]
+    assert len(unions) == 1
+    assert {c.iri for c in unions[0].Classes} == {
+        "http://ex.org/A", "http://ex.org/B", "http://ex.org/C",
+    }
+    # AllDisjoint(A, B, C)
+    groups = [{c.iri for c in d.entities} for d in onto.disjoint_classes()]
+    assert {"http://ex.org/A", "http://ex.org/B", "http://ex.org/C"} in groups
+
+
 # FIX 1 tests
 
 def test_custom_annotation_property():
