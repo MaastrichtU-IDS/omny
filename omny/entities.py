@@ -13,11 +13,17 @@ class EntityResolver:
     created in the target ontology if they do not yet exist.
     """
 
+    _RDF_TYPE = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type"
+    _OWL_NAMED_INDIVIDUAL = "http://www.w3.org/2002/07/owl#NamedIndividual"
+
     def __init__(self, onto: owlready2.Ontology, prefixes: Optional[Dict[str, str]] = None):
         self.onto = onto
         self.world = onto.world
         self.prefixes = dict(prefixes or {})
         self.base = onto.base_iri  # e.g. "http://omny.test/onto.owl#"
+        # nodeID label -> owlready2 anonymous individual, so repeated ``_:x``
+        # references within one parse resolve to the same blank node.
+        self._blank_individuals: Dict[str, owlready2.Thing] = {}
 
     def expand(self, name: str) -> str:
         """Return the full IRI for a Manchester name."""
@@ -79,7 +85,14 @@ class EntityResolver:
             return existing
         return self._get_or_create(name, owlready2.AnnotationProperty)
 
+    @staticmethod
+    def _is_node_id(name: str) -> bool:
+        """True if *name* is a Manchester ``nodeID`` (blank node, ``_:label``)."""
+        return name.startswith("_:")
+
     def get_individual(self, name: str) -> owlready2.Thing:
+        if self._is_node_id(name):
+            return self._get_or_create_anonymous(name[2:])
         iri = self.expand(name)
         existing = self.world[iri]
         if existing is not None:
@@ -88,3 +101,27 @@ class EntityResolver:
         namespace = self.onto.get_namespace(ns_base)
         with namespace:
             return owlready2.Thing(local, namespace=namespace)
+
+    def _get_or_create_anonymous(self, label: str) -> owlready2.Thing:
+        """Return the owlready2 anonymous individual (blank node) for nodeID
+        *label*, creating it on first reference.
+
+        owlready2 has no public constructor for an anonymous individual, so we
+        mint a fresh blank-node storid, anchor it with an
+        ``rdf:type owl:NamedIndividual`` triple (which makes owlready2
+        materialise a ``Thing`` with that negative storid and an empty IRI),
+        and hand back the materialised object. The loader then applies
+        ``Types:``/``Facts:``/``Annotations:`` to it exactly as for a named
+        individual. Repeated ``_:label`` references in one document reuse the
+        same blank node (cached by *label*).
+        """
+        existing = self._blank_individuals.get(label)
+        if existing is not None:
+            return existing
+        bnode = self.world.new_blank_node()
+        rdf_type = self.world._abbreviate(self._RDF_TYPE)
+        named_individual = self.world._abbreviate(self._OWL_NAMED_INDIVIDUAL)
+        self.onto.graph._add_obj_triple_raw_spo(bnode, rdf_type, named_individual)
+        ind = self.world._get_by_storid(bnode)
+        self._blank_individuals[label] = ind
+        return ind
