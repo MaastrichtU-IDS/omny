@@ -318,8 +318,8 @@ def main():  # pragma: no cover - UI glue
 
     # ── SPARQL ───────────────────────────────────────────────────────────────
     with tab_sparql:
-        default_q = ("PREFIX owl: <%sl>\n"
-                     "SELECT ?c WHERE { ?c a owl:Class } LIMIT 100" % _OWL[:-1])
+        default_q = (f"PREFIX owl: <{_OWL}>\n"
+                     "SELECT ?c WHERE { ?c a owl:Class } LIMIT 100")
         q = st.text_area("SPARQL SELECT / ASK", value=default_q, height=160)
         if st.button("▶ Run SPARQL", disabled=not q.strip()):
             try:
