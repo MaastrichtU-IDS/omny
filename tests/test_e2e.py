@@ -125,7 +125,9 @@ def test_flat_role_encoding_matches_flat_triples():
         q = class_relations_query(expr, construct=False, **kw)
         return {str(s["rel"]).strip("<>") for s in run_pyoxigraph(q, store)}
 
-    L = lambda *xs: {NS + x for x in xs}
+    def L(*xs):
+        return {NS + x for x in xs}
+
     assert run("site some owl:Thing", role_encoding="flat") == L("A", "B", "C")
     assert run("site some Organ", role_encoding="flat") == L("A", "B", "C")  # filler subsumption
     assert run("site some Heart", role_encoding="flat") == L("A", "C")
