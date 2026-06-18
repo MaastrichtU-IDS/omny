@@ -69,6 +69,38 @@ def test_execute_select(kind):
     assert len(rows) >= 11
 
 
+@pytest.mark.parametrize("kind", ["pyoxigraph", "rdflib"])
+def test_detect_role_encoding(kind):
+    import rdflib
+    # biomed (proper OWL: EquivalentTo restrictions -> owl:Restriction bnodes)
+    world, _ = E.load_from_path(_BIOMED)
+    store = E.build_store(E.world_to_nt(world), kind)
+    assert E.detect_role_encoding(store, kind) == "structural"
+
+    # a flat graph: roles as direct triples, no owl:Restriction bnodes
+    g = rdflib.Graph()
+    g.parse(data="""@prefix ex: <http://ex.org/> .
+        ex:A ex:site ex:Heart . ex:B ex:site ex:Lung .""", format="turtle")
+    flat = E.build_store(g.serialize(format="nt").encode(), kind)
+    assert E.detect_role_encoding(flat, kind) == "flat"
+
+
+def test_extract_prefixes():
+    rdfxml = '<rdf:RDF xmlns:sulo="https://w3id.org/sulo/" xmlns:mie="urn:mie#" xmlns="urn:base#">'
+    p = E.extract_prefixes(rdfxml)
+    assert p["sulo"] == "https://w3id.org/sulo/" and p["mie"] == "urn:mie#"
+    ttl = "@prefix ex: <http://ex.org/> .\nPrefix: foo: <http://foo/>"
+    p2 = E.extract_prefixes(ttl)
+    assert p2["ex"] == "http://ex.org/" and p2["foo"] == "http://foo/"
+
+
+def test_expression_empty_is_friendly_error():
+    world, onto = E.load_from_path(_BIOMED)
+    store = E.build_store(E.world_to_nt(world), "pyoxigraph")
+    with pytest.raises(ValueError):
+        E.run_expression("   ", onto, ["equiv"], store, "pyoxigraph")
+
+
 def test_render_entity_and_document():
     world, onto = E.load_from_path(_BIOMED)
     pfx = E.prefixes_for(onto)
