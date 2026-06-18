@@ -143,11 +143,14 @@ def test_intersection_two_named():
     expr = omny.parse_expression("A and B", onto)
     var, pattern = expression_to_pattern(expr)
     assert var == "?t0"
+    # Unordered set match: each member via rdf:rest*/rdf:first + a cardinality guard.
     assert _norm(pattern) == _norm(
         "?t0 a owl:Class ; "
         "owl:intersectionOf ?t1 . "
-        "?t1 rdf:first <http://ex.org/A> ; rdf:rest ?t2 . "
-        "?t2 rdf:first <http://ex.org/B> ; rdf:rest rdf:nil ."
+        "?t1 rdf:rest*/rdf:first <http://ex.org/A> . "
+        "?t1 rdf:rest*/rdf:first <http://ex.org/B> . "
+        "FILTER NOT EXISTS { ?t1 rdf:rest*/rdf:first ?t2 . "
+        "FILTER(?t2 != <http://ex.org/A> && ?t2 != <http://ex.org/B>) }"
     )
 
 
@@ -162,15 +165,18 @@ def test_intersection_named_and_anonymous():
     expr = omny.parse_expression("Drug and (treats some Disease)", onto)
     var, pattern = expression_to_pattern(expr)
     assert var == "?t0"
-    # ?t0 = intersection node; ?t1 / ?t2 = list spine; ?t3 = nested someValuesFrom restriction.
+    # ?t0 = intersection node; ?t1 = list node; ?t2 = nested someValuesFrom
+    # restriction (a list member); ?t3 = cardinality-guard variable.
     assert _norm(pattern) == _norm(
         "?t0 a owl:Class ; "
         "owl:intersectionOf ?t1 . "
-        "?t1 rdf:first <http://ex.org/Drug> ; rdf:rest ?t2 . "
-        "?t2 rdf:first ?t3 ; rdf:rest rdf:nil . "
-        "?t3 a owl:Restriction ; "
+        "?t1 rdf:rest*/rdf:first <http://ex.org/Drug> . "
+        "?t1 rdf:rest*/rdf:first ?t2 . "
+        "?t2 a owl:Restriction ; "
         "owl:onProperty <http://ex.org/treats> ; "
-        "owl:someValuesFrom <http://ex.org/Disease> ."
+        "owl:someValuesFrom <http://ex.org/Disease> . "
+        "FILTER NOT EXISTS { ?t1 rdf:rest*/rdf:first ?t3 . "
+        "FILTER(?t3 != <http://ex.org/Drug> && ?t3 != ?t2) }"
     )
 
 
@@ -187,8 +193,10 @@ def test_union_two_named():
     assert _norm(pattern) == _norm(
         "?t0 a owl:Class ; "
         "owl:unionOf ?t1 . "
-        "?t1 rdf:first <http://ex.org/A> ; rdf:rest ?t2 . "
-        "?t2 rdf:first <http://ex.org/B> ; rdf:rest rdf:nil ."
+        "?t1 rdf:rest*/rdf:first <http://ex.org/A> . "
+        "?t1 rdf:rest*/rdf:first <http://ex.org/B> . "
+        "FILTER NOT EXISTS { ?t1 rdf:rest*/rdf:first ?t2 . "
+        "FILTER(?t2 != <http://ex.org/A> && ?t2 != <http://ex.org/B>) }"
     )
 
 
@@ -260,8 +268,10 @@ def test_one_of():
     assert _norm(pattern) == _norm(
         "?t0 a owl:Class ; "
         "owl:oneOf ?t1 . "
-        "?t1 rdf:first <http://ex.org/a> ; rdf:rest ?t2 . "
-        "?t2 rdf:first <http://ex.org/b> ; rdf:rest rdf:nil ."
+        "?t1 rdf:rest*/rdf:first <http://ex.org/a> . "
+        "?t1 rdf:rest*/rdf:first <http://ex.org/b> . "
+        "FILTER NOT EXISTS { ?t1 rdf:rest*/rdf:first ?t2 . "
+        "FILTER(?t2 != <http://ex.org/a> && ?t2 != <http://ex.org/b>) }"
     )
 
 

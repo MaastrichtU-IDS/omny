@@ -143,28 +143,34 @@ class _Walker:
         )
 
     def _list_pattern(self, items) -> tuple[str, str]:
-        """Return (head_var, pattern) for an rdf:List of operands.
+        """Return (list_var, pattern) for an rdf:List of operands, matched as an
+        UNORDERED set.
 
-        Emits a fixed-length, ordered list pattern that matches the canonical
-        rdf:first/rdf:rest spine owlready2 writes for intersection/union/oneOf.
-        Nested anonymous operands contribute their own structural triples.
+        ``owl:intersectionOf`` / ``owl:unionOf`` / ``owl:oneOf`` are set-valued;
+        the rdf:first/rdf:rest serialization order is incidental, so a query must
+        match regardless of how the operands were written. Each operand must
+        appear somewhere in the list (``rdf:rest*/rdf:first``), and a cardinality
+        guard rejects any extra members — so ``A and B`` matches a stored
+        ``(B A)`` but not ``(A B C)``. Nested anonymous operands contribute their
+        own structural triples.
         """
-        head = self.fresh()
+        list_var = self.fresh()
         triples = []
-        current = head
-        for i, item in enumerate(items):
+        member_terms = []
+        for item in items:
             item_term, extra = self.operand(item)
-            if i < len(items) - 1:
-                nxt = self.fresh()
-                triples.append(f"{current} rdf:first {item_term} ; rdf:rest {nxt} .")
-                if extra:
-                    triples.append(extra)
-                current = nxt
-            else:
-                triples.append(f"{current} rdf:first {item_term} ; rdf:rest rdf:nil .")
-                if extra:
-                    triples.append(extra)
-        return head, " ".join(triples)
+            triples.append(f"{list_var} rdf:rest*/rdf:first {item_term} .")
+            if extra:
+                triples.append(extra)
+            member_terms.append(item_term)
+        if member_terms:
+            m = self.fresh()
+            ineqs = " && ".join(f"{m} != {t}" for t in member_terms)
+            triples.append(
+                f"FILTER NOT EXISTS {{ {list_var} rdf:rest*/rdf:first {m} . "
+                f"FILTER({ineqs}) }}"
+            )
+        return list_var, " ".join(triples)
 
 
 def expression_to_pattern(expr) -> tuple[str, str]:
@@ -176,3 +182,99 @@ def expression_to_pattern(expr) -> tuple[str, str]:
     """
     var, pattern = _Walker()._walk(expr)
     return var, " ".join(pattern.split())
+
+
+class _FlatWalker:
+    """Translate an anonymous class expression into a SPARQL body that selects
+    the concepts which satisfy it in a FLAT role encoding.
+
+    Where :class:`_Walker` matches OWL ``owl:Restriction`` blank nodes (the RDF
+    serialization of a class axiom), ``_FlatWalker`` instead reads roles as
+    direct triples ``?concept <prop> <value>`` — the encoding used by e.g.
+    SNOMED CT loaded as flat triples. A restriction therefore becomes a
+    constraint on the candidate concept itself:
+
+      ``prop some owl:Thing``  -> ``?c <prop> ?v .``
+      ``prop some Filler``     -> ``?c <prop> ?v . ?v rdfs:subClassOf* <Filler> .``
+      ``prop value <ind>``     -> ``?c <prop> <ind> .``
+      ``prop min/max/exactly N`` -> aggregate sub-SELECT with COUNT(DISTINCT ?v)
+      a named class ``C``      -> ``?c rdfs:subClassOf+ <C> .``
+      ``A and B``              -> conjunction (positive operands first, NOT last)
+      ``A or B``               -> ``{ … } UNION { … }``
+      ``not A``                -> ``FILTER NOT EXISTS { … }``
+      ``{a, b}``               -> ``VALUES ?c { <a> <b> }``
+
+    This is the asserted-graph analogue of a DL role query; it does no
+    reasoning beyond the transitive ``rdfs:subClassOf`` paths it emits.
+    """
+
+    def __init__(self):
+        self._n = 0
+
+    def _fresh(self) -> str:
+        self._n += 1
+        return f"?v{self._n}"
+
+    def _role_triple(self, prop, s: str, o: str) -> str:
+        if hasattr(prop, "iri"):
+            return f"{s} <{prop.iri}> {o} ."
+        if isinstance(prop, owlready2.Inverse):
+            return f"{o} <{prop.property.iri}> {s} ."
+        raise ValueError(f"unsupported property kind: {type(prop).__name__}")
+
+    def _filler(self, value, v: str) -> str:
+        """Qualified-filler constraint: ``?v`` must be the filler or a subclass.
+        Empty for an unqualified restriction (owl:Thing / no filler)."""
+        if value is not None and value is not owlready2.Thing and hasattr(value, "iri"):
+            return f" {v} rdfs:subClassOf* <{value.iri}> ."
+        return ""
+
+    def walk(self, expr, s: str) -> str:
+        if isinstance(expr, owlready2.Restriction):
+            return self._restriction(expr, s)
+        if isinstance(expr, owlready2.And):
+            ops = list(expr.Classes)
+            pos = [o for o in ops if not isinstance(o, owlready2.Not)]
+            neg = [o for o in ops if isinstance(o, owlready2.Not)]
+            return " ".join(self.walk(o, s) for o in (pos + neg))
+        if isinstance(expr, owlready2.Or):
+            return "{ " + " } UNION { ".join(self.walk(o, s) for o in expr.Classes) + " }"
+        if isinstance(expr, owlready2.Not):
+            return f"FILTER NOT EXISTS {{ {self.walk(expr.Class, s)} }}"
+        if isinstance(expr, owlready2.OneOf):
+            vals = " ".join(f"<{i.iri}>" for i in expr.instances)
+            return f"VALUES {s} {{ {vals} }}"
+        if hasattr(expr, "iri"):
+            return f"{s} rdfs:subClassOf+ <{expr.iri}> ."
+        raise ValueError(f"flat mode: unsupported construct {type(expr).__name__}")
+
+    def _restriction(self, r: owlready2.Restriction, s: str) -> str:
+        t = r.type
+        if t == owlready2.VALUE:
+            if not hasattr(r.value, "iri"):
+                raise ValueError("flat mode: hasValue requires a named individual")
+            return self._role_triple(r.property, s, f"<{r.value.iri}>")
+        if t == owlready2.HAS_SELF:
+            return self._role_triple(r.property, s, s)
+        if t == owlready2.SOME:
+            v = self._fresh()
+            return self._role_triple(r.property, s, v) + self._filler(r.value, v)
+        if t == owlready2.ONLY:
+            raise NotImplementedError(
+                "flat mode: 'only'/allValuesFrom is not expressible over an "
+                "asserted flat graph (open-world assumption); use a reasoner."
+            )
+        if t in (owlready2.MIN, owlready2.MAX, owlready2.EXACTLY):
+            n = int(r.cardinality)
+            v = self._fresh()
+            op = {owlready2.MIN: ">=", owlready2.MAX: "<=", owlready2.EXACTLY: "="}[t]
+            body = self._role_triple(r.property, s, v) + self._filler(r.value, v)
+            return (f"{{ SELECT {s} WHERE {{ {body} }} GROUP BY {s} "
+                    f"HAVING(COUNT(DISTINCT {v}) {op} {n}) }}")
+        raise ValueError(f"flat mode: unsupported restriction type {t}")
+
+
+def expression_to_flat_pattern(expr, var: str = "?rel") -> str:
+    """Return a SPARQL WHERE-body constraining *var* to the concepts that
+    satisfy *expr* over a flat role encoding (see :class:`_FlatWalker`)."""
+    return " ".join(_FlatWalker().walk(expr, var).split())
