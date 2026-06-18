@@ -28,6 +28,7 @@ import-safe (no Streamlit), so they can be unit-tested headlessly.
 from __future__ import annotations
 
 import os
+import re
 from io import BytesIO
 
 import omny
@@ -62,6 +63,12 @@ def load_from_path(path: str):
         with open(path, encoding="utf-8") as f:
             return load_from_text(f.read())
     import owlready2
+
+    # Resolve owl:imports from sibling files in the same directory (e.g. a
+    # vendored ontology + its imports) instead of fetching them over the web.
+    folder = os.path.dirname(os.path.abspath(path))
+    if folder not in owlready2.onto_path:
+        owlready2.onto_path.append(folder)
 
     world = owlready2.World()
     fmt = {".ttl": "turtle", ".nt": "ntriples", ".rdf": "rdfxml",
@@ -183,15 +190,70 @@ def run_relations(iri: str, relations, store, kind: str):
     return q, cols, rows
 
 
-def expression_query(expr_text: str, onto, relations) -> str:
-    """Parse a Manchester expression and build a structural relation query."""
-    construct = omny.parse_expression(expr_text, onto, prefixes=prefixes_for(onto))
+_SCT_PREFIXED = re.compile(r"\b([A-Za-z][\w.-]*):(\d[\w.-]*)")
+
+
+def _expand_numeric_prefixes(text: str, prefixes: dict) -> str:
+    """Expand prefixed names with a numeric local part (e.g. ``sct:363698007``)
+    to full IRIs — omny's Manchester lexer rejects those, but SNOMED uses them."""
+    def sub(m):
+        pfx, local = m.group(1), m.group(2)
+        ns = prefixes.get(pfx)
+        return f"<{ns}{local}>" if ns else m.group(0)
+    return _SCT_PREFIXED.sub(sub, text)
+
+
+_XMLNS_RE = re.compile(r'xmlns:([A-Za-z][\w.-]*)\s*=\s*"([^"]+)"')
+_TTL_PREFIX_RE = re.compile(r'(?:@?[Pp]refix:?)\s+([A-Za-z][\w.-]*):\s*<([^>]+)>')
+
+
+def extract_prefixes(text: str) -> dict:
+    """Best-effort prefix map from an ontology document's declarations:
+    RDF/XML ``xmlns:p="..."`` and Turtle/Manchester ``@prefix p: <...>`` /
+    ``Prefix: p: <...>``. owlready2 does not surface these, so the explorer scans
+    the source so users can type ``sulo:`` / ``mie:`` etc."""
+    out = {}
+    for m in _XMLNS_RE.finditer(text):
+        out[m.group(1)] = m.group(2)
+    for m in _TTL_PREFIX_RE.finditer(text):
+        out[m.group(1)] = m.group(2)
+    out.pop("xml", None)  # not a usable Manchester prefix
+    return out
+
+
+def expression_query(expr_text: str, onto, relations,
+                     role_encoding: str = "structural", extra_prefixes=None) -> str:
+    """Parse a Manchester expression and build a relation query.
+
+    role_encoding="structural" matches OWL owl:Restriction bnodes; "flat" reads
+    roles as direct ?concept <prop> <value> triples (SNOMED-style)."""
+    if not (expr_text and expr_text.strip()):
+        raise ValueError("Enter a class expression, e.g. `treats some Disease`.")
+    pfx = prefixes_for(onto)
+    pfx.update(extra_prefixes or {})
+    pfx.setdefault("sct", "http://snomed.info/id/")
+    construct = omny.parse_expression(_expand_numeric_prefixes(expr_text, pfx),
+                                      onto, prefixes=pfx)
     return omny.class_relations_query(construct, relations=list(relations),
-                                      construct=False)
+                                      construct=False, role_encoding=role_encoding)
 
 
-def run_expression(expr_text: str, onto, relations, store, kind: str):
-    q = expression_query(expr_text, onto, relations)
+def detect_role_encoding(store, kind: str) -> str:
+    """Probe the store to choose how role/restriction expressions are matched.
+
+    If the graph contains any ``owl:Restriction`` class axioms, the standard OWL
+    serialization is in use -> "structural". Otherwise roles are stored as flat
+    ``concept prop value`` triples (e.g. SNOMED CT) -> "flat"."""
+    ask = ("PREFIX owl: <http://www.w3.org/2002/07/owl#> "
+           "ASK { ?r a owl:Restriction }")
+    _, rows = execute_select(ask, store, kind)
+    has_restrictions = bool(rows) and str(rows[0][0]).strip().lower() == "true"
+    return "structural" if has_restrictions else "flat"
+
+
+def run_expression(expr_text: str, onto, relations, store, kind: str,
+                   role_encoding: str = "structural", extra_prefixes=None):
+    q = expression_query(expr_text, onto, relations, role_encoding, extra_prefixes)
     cols, rows = execute_select(q, store, kind)
     return q, cols, rows
 
@@ -211,6 +273,7 @@ def main():  # pragma: no cover - UI glue
     ss.setdefault("store", None)
     ss.setdefault("store_kind", "pyoxigraph")
     ss.setdefault("source_label", "")
+    ss.setdefault("prefixes", {})
 
     _EXAMPLE = os.path.join(os.path.dirname(__file__), "data", "biomed.omn")
 
@@ -234,9 +297,13 @@ def main():  # pragma: no cover - UI glue
 
         if st.button("Load", type="primary", width="stretch"):
             try:
+                src_text = omn_text or ""
                 if path:
                     world, onto = load_from_path(path)
                     label = path
+                    if not src_text:
+                        with open(path, encoding="utf-8", errors="ignore") as f:
+                            src_text = f.read(65536)  # header holds the prefixes
                 elif omn_text:
                     world, onto = load_from_text(omn_text)
                     label = mode
@@ -245,6 +312,7 @@ def main():  # pragma: no cover - UI glue
                     st.stop()
                 ss.world, ss.onto, ss.store_kind, ss.source_label = (
                     world, onto, kind, label)
+                ss.prefixes = extract_prefixes(src_text)
                 ss.store = build_store(world_to_nt(world), kind)
                 st.success(f"Loaded {onto.base_iri}")
             except Exception as e:
@@ -299,22 +367,43 @@ def main():  # pragma: no cover - UI glue
 
     # ── Expression ───────────────────────────────────────────────────────────
     with tab_expr:
-        st.caption("Match an anonymous class expression structurally "
-                   "(asserted graph; operands matched as an unordered set).")
-        expr = st.text_input("Manchester expression",
-                             placeholder="treats some Disease   |   A and B")
-        rels = st.multiselect("Relations", RELATION_CHOICES,
-                              default=["equiv"], key="expr_kinds")
-        if st.button("▶ Match expression", disabled=not (expr.strip() and rels)):
+        st.caption("Match an anonymous class expression. Mode **auto** probes the "
+                   "graph: **structural** matches OWL `owl:Restriction` bnodes, "
+                   "**flat-role** reads roles as direct `concept prop value` triples "
+                   "(SNOMED-style). `sct:NNN` is expanded to a full IRI automatically.")
+        expr = st.text_input(
+            "Manchester expression",
+            placeholder="sct:363698007 some owl:Thing   |   A and (treats some Disease)")
+        c1, c2 = st.columns([1, 1])
+        with c1:
+            mode = st.selectbox("Match mode", ["auto", "structural", "flat-role"],
+                                key="expr_mode",
+                                help="auto probes the graph for owl:Restriction bnodes")
+        with c2:
+            rels = st.multiselect("Relations (structural only)", RELATION_CHOICES,
+                                  default=["equiv"], key="expr_kinds")
+        if mode == "auto":
+            encoding = detect_role_encoding(store, kind)
+            st.caption(f"Auto-detected encoding: **{encoding}** "
+                       f"({'OWL owl:Restriction bnodes found' if encoding == 'structural' else 'no owl:Restriction bnodes — roles are flat triples'})")
+        else:
+            encoding = "flat" if mode == "flat-role" else "structural"
+        extra = ss.get("prefixes", {})
+        avail = sorted(set(extra) | {"", "sct", "rdfs", "owl", "xsd"})
+        st.caption("Prefixes available: " + ", ".join(f"`{p or ':'}`" for p in avail))
+        if st.button("▶ Match expression"):
             try:
-                sparql, cols, rows = run_expression(expr, onto, rels, store, kind)
+                use_rels = rels or ["sub"]
+                sparql, cols, rows = run_expression(expr, onto, use_rels, store,
+                                                    kind, role_encoding=encoding,
+                                                    extra_prefixes=extra)
                 st.success(f"{len(rows)} match(es)")
                 st.dataframe(pd.DataFrame(rows, columns=cols),
                              width="stretch")
                 with st.expander("Generated SPARQL"):
                     st.code(sparql, language="sparql")
             except Exception as e:
-                st.exception(e)
+                st.error(str(e))
 
     # ── SPARQL ───────────────────────────────────────────────────────────────
     with tab_sparql:
