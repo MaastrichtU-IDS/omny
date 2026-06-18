@@ -2,6 +2,7 @@ import io
 from pathlib import Path
 
 import pyoxigraph
+import pytest
 import rdflib
 
 import omny
@@ -88,6 +89,57 @@ def test_direct_sub_excludes_transitive():
     assert "http://ex.org/Margherita" not in iris
 
 
+def test_flat_role_encoding_matches_flat_triples():
+    """role_encoding='flat' answers role-restriction queries over a flat role
+    encoding (direct ?c <prop> <val> triples, no owl:Restriction bnodes), the
+    way SNOMED CT is stored. Structural mode finds nothing in such a graph."""
+    onto = omny.parse("""
+        Prefix: : <http://ex.org/>
+        Ontology: <http://ex.org/>
+        ObjectProperty: site
+        ObjectProperty: morph
+        Class: Heart
+        Class: Lung
+        Class: Organ
+        Class: Swelling
+    """)
+    NS = "http://ex.org/"
+    PFX = {"": NS, "owl": "http://www.w3.org/2002/07/owl#",
+           "rdfs": "http://www.w3.org/2000/01/rdf-schema#"}
+    # FLAT data: roles as direct triples; Heart/Lung are subclasses of Organ.
+    g = rdflib.Graph()
+    g.parse(data="""
+        @prefix ex: <http://ex.org/> .
+        @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+        ex:Heart rdfs:subClassOf ex:Organ .  ex:Lung rdfs:subClassOf ex:Organ .
+        ex:A ex:site ex:Heart .
+        ex:B ex:site ex:Lung ;  ex:morph ex:Swelling .
+        ex:C ex:site ex:Heart ; ex:site ex:Lung .
+    """, format="turtle")
+    store = pyoxigraph.Store()
+    store.load(io.BytesIO(g.serialize(format="nt").encode()),
+               format=pyoxigraph.RdfFormat.N_TRIPLES)
+
+    def run(expr_text, **kw):
+        expr = omny.parse_expression(expr_text, onto, prefixes=PFX)
+        q = class_relations_query(expr, construct=False, **kw)
+        return {str(s["rel"]).strip("<>") for s in run_pyoxigraph(q, store)}
+
+    def L(*xs):
+        return {NS + x for x in xs}
+
+    assert run("site some owl:Thing", role_encoding="flat") == L("A", "B", "C")
+    assert run("site some Organ", role_encoding="flat") == L("A", "B", "C")  # filler subsumption
+    assert run("site some Heart", role_encoding="flat") == L("A", "C")
+    assert run("site min 2 owl:Thing", role_encoding="flat") == L("C")
+    assert run("site some owl:Thing and morph some owl:Thing",
+               role_encoding="flat") == L("B")
+    assert run("site some owl:Thing and not (morph some owl:Thing)",
+               role_encoding="flat") == L("A", "C")
+    # Structural mode finds nothing: there are no owl:Restriction bnodes here.
+    assert run("site some owl:Thing", role_encoding="structural") == set()
+
+
 def _pizza_onto():
     text = Path("tests/data/pizza.omn").read_text()
     return omny.parse(text)
@@ -131,6 +183,15 @@ def test_anonymous_equiv_finds_named_class_pyoxigraph():
     assert "http://ex.org/Margherita" in rows
 
 
+@pytest.mark.xfail(
+    reason="Anonymous targets containing intersection/union/oneOf now match "
+    "operands as an unordered set (rdf:rest*/rdf:first + FILTER NOT EXISTS). "
+    "owlready2's built-in SPARQL engine does not support property paths or "
+    "NOT EXISTS, so this query must run on rdflib/pyoxigraph/an endpoint "
+    "instead (see test_anonymous_equiv_pyoxigraph_select).",
+    raises=ValueError,
+    strict=True,
+)
 def test_anonymous_equiv_owlready2_select():
     onto = _pizza_onto()
     expr = omny.parse_expression(

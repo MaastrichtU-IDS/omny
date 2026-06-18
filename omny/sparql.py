@@ -66,8 +66,16 @@ def _target_term(target) -> tuple[str, str]:
     )
 
 
+def _is_anonymous_construct(target) -> bool:
+    import owlready2
+
+    return isinstance(target, (owlready2.Restriction, owlready2.And,
+                               owlready2.Or, owlready2.Not, owlready2.OneOf))
+
+
 def class_relations_query(target, relations: Iterable[str] = ("super", "sub", "equiv"),
-                          construct: bool = True) -> str:
+                          construct: bool = True,
+                          role_encoding: str = "structural") -> str:
     """Build a store-agnostic SPARQL query for class-relation retrieval (asserted graph only).
 
     Args:
@@ -82,8 +90,10 @@ def class_relations_query(target, relations: Iterable[str] = ("super", "sub", "e
             * An owlready2 anonymous construct (``Restriction``, ``And``, ``Or``,
               ``Not``, ``OneOf``) — the query is built with a structural pattern that
               binds a fresh variable to any blank node whose outgoing structure
-              matches. Operand order is matched as declared; permutations of
-              intersection/union operands do not match each other.
+              matches. Intersection/union/oneOf operands are matched as an
+              unordered set, so operand permutations match each other (requires a
+              SPARQL 1.1 backend with property paths — rdflib / pyoxigraph /
+              endpoint; owlready2's built-in engine does not support it).
 
         relations: One or more of the six supported relation names (default:
             ``("super", "sub", "equiv")``):
@@ -103,6 +113,17 @@ def class_relations_query(target, relations: Iterable[str] = ("super", "sub", "e
             related classes.  If ``False``, emit a SELECT query returning just the
             related IRIs (``?rel`` / ``?ind``).
 
+        role_encoding: How an **anonymous** *target* (a class expression) is
+            matched. ``"structural"`` (default) matches the OWL ``owl:Restriction``
+            blank nodes that serialize the expression — the right choice when the
+            graph stores class axioms in standard OWL form. ``"flat"`` instead
+            reads roles as direct ``?concept <prop> <value>`` triples and returns
+            the concepts that satisfy the expression — the right choice for graphs
+            that store roles as flat triples (e.g. SNOMED CT). ``"flat"`` emits a
+            ``SELECT DISTINCT ?rel`` (``construct`` must be ``False``), ignores
+            ``relations`` (the result is the set of satisfying concepts), and has
+            no effect on named targets. Requires a SPARQL 1.1 backend.
+
     Returns:
         A SPARQL query string (starts with PREFIX declarations).
 
@@ -115,6 +136,17 @@ def class_relations_query(target, relations: Iterable[str] = ("super", "sub", "e
           ``run_rdflib(q, world.as_rdflib_graph())`` for CONSTRUCT against owlready2
           data.
     """
+    if role_encoding not in ("structural", "flat"):
+        raise ValueError(f"role_encoding must be 'structural' or 'flat', got {role_encoding!r}")
+
+    if role_encoding == "flat" and _is_anonymous_construct(target):
+        if construct:
+            raise ValueError("role_encoding='flat' supports SELECT only (construct=False)")
+        from omny.pattern import expression_to_flat_pattern  # local import; avoids cycle
+
+        body = expression_to_flat_pattern(target, "?rel")
+        return f"{prefix_header()}\nSELECT DISTINCT ?rel\nWHERE {{\n{body}\n}}"
+
     c, target_pattern = _target_term(target)
     rels = list(relations)
     if not rels:
